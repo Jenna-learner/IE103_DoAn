@@ -2,7 +2,7 @@
  * Topbar — Thanh tiêu đề phía trên
  * Hiển thị: nút toggle sidebar | tiêu đề trang | tên chi nhánh | nút logout
  */
-import { Menu, Bell, LogOut, RefreshCw } from 'lucide-react'
+import { Menu, Bell, LogOut } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import useAuthStore from '../store/authStore'
@@ -15,6 +15,7 @@ const PAGE_TITLE = {
   '/khach-hang':     'Khách hàng CRM',
   '/kho/ton-kho':    'Quản lý Tồn kho',
   '/kho/nhat-ky':    'Nhật ký Biến động Kho',
+  '/kho/kiem-kho':   'Kiểm kho & Điều chỉnh',
   '/phieu-nhap':     'Phiếu Nhập hàng',
   '/phan-cong':      'Phân công Ca làm việc',
   '/phieu-chi':      'Phiếu Chi vận hành',

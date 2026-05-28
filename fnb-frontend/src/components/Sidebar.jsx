@@ -2,23 +2,23 @@
  * Sidebar — Navigation phân quyền theo vaiTro
  *
  * Hiển thị menu khác nhau:
- *   admin              → Tất cả module
- *   quan_ly_chinhanh   → Dashboard, Kho, Phiếu nhập, Phân công, Phiếu chi, Báo cáo
- *   thu_ngan           → POS, Lịch sử HĐ, Khách hàng
+ *   role_admin              → Tất cả module
+ *   role_readonly   → Dashboard, Kho, Phiếu nhập, Phân công, Phiếu chi, Báo cáo
+ *   role_cashier           → POS, Lịch sử HĐ, Khách hàng
  *   kho                → Tồn kho, Nhật ký, Phiếu nhập
  */
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingCart, FileText, Users, Package,
   ClipboardList, Truck, CalendarDays, Receipt, BarChart2,
-  Building2, Coffee, UserCog, ChevronRight,
+  Building2, Coffee, UserCog, ChevronRight, ScanLine,
 } from 'lucide-react'
 import clsx from 'clsx'
 import useAuthStore from '../store/authStore'
 
 // ── Định nghĩa menu theo vai trò ──────────────────────────
 const MENU = {
-  admin: [
+  role_admin: [
     { group: 'Tổng quan',   items: [{ to: '/dashboard',        icon: LayoutDashboard, label: 'Dashboard' }] },
     { group: 'Bán hàng',    items: [
         { to: '/pos',                icon: ShoppingCart,  label: 'POS Bán hàng' },
@@ -28,6 +28,7 @@ const MENU = {
     { group: 'Kho & Nhập',  items: [
         { to: '/kho/ton-kho',        icon: Package,       label: 'Tồn kho' },
         { to: '/kho/nhat-ky',        icon: ClipboardList, label: 'Nhật ký kho' },
+        { to: '/kho/kiem-kho',       icon: ScanLine,      label: 'Kiểm kho' },
         { to: '/phieu-nhap',         icon: Truck,         label: 'Phiếu nhập hàng' },
     ]},
     { group: 'Nhân sự',     items: [
@@ -41,11 +42,12 @@ const MENU = {
         { to: '/chi-nhanh',          icon: Building2,     label: 'Chi nhánh' },
     ]},
   ],
-  quan_ly_chinhanh: [
+  role_readonly: [
     { group: 'Tổng quan',   items: [{ to: '/dashboard',        icon: LayoutDashboard, label: 'Dashboard' }] },
     { group: 'Kho & Nhập',  items: [
         { to: '/kho/ton-kho',        icon: Package,       label: 'Tồn kho' },
         { to: '/kho/nhat-ky',        icon: ClipboardList, label: 'Nhật ký kho' },
+        { to: '/kho/kiem-kho',       icon: ScanLine,      label: 'Kiểm kho' },
         { to: '/phieu-nhap',         icon: Truck,         label: 'Phiếu nhập hàng' },
     ]},
     { group: 'Nhân sự',     items: [
@@ -57,17 +59,18 @@ const MENU = {
         { to: '/hoa-don',            icon: FileText,      label: 'Lịch sử Hóa đơn' },
     ]},
   ],
-  thu_ngan: [
+  role_cashier: [
     { group: 'Bán hàng',    items: [
         { to: '/pos',                icon: ShoppingCart,  label: 'POS Bán hàng' },
         { to: '/hoa-don',            icon: FileText,      label: 'Lịch sử Hóa đơn' },
         { to: '/khach-hang',         icon: Users,         label: 'Khách hàng CRM' },
     ]},
   ],
-  kho: [
+  role_warehouse_staff: [
     { group: 'Kho vận',     items: [
         { to: '/kho/ton-kho',        icon: Package,       label: 'Tồn kho' },
         { to: '/kho/nhat-ky',        icon: ClipboardList, label: 'Nhật ký kho' },
+        { to: '/kho/kiem-kho',       icon: ScanLine,      label: 'Kiểm kho' },
         { to: '/phieu-nhap',         icon: Truck,         label: 'Phiếu nhập hàng' },
     ]},
   ],
@@ -75,10 +78,10 @@ const MENU = {
 
 // Badge nhãn vai trò
 const ROLE_BADGE = {
-  admin:             { label: 'Admin',        cls: 'bg-purple-500/20 text-purple-300' },
-  quan_ly_chinhanh:  { label: 'Quản lý CN',   cls: 'bg-blue-500/20 text-blue-300' },
-  thu_ngan:          { label: 'Thu ngân',      cls: 'bg-brand-500/20 text-brand-300' },
-  kho:               { label: 'Kho vận',       cls: 'bg-green-500/20 text-green-300' },
+  role_admin:             { label: 'Admin',        cls: 'bg-purple-500/20 text-purple-300' },
+  role_readonly:        { label: 'Giám sát',       cls: 'bg-blue-500/20 text-blue-300' },
+  role_cashier:          { label: 'Thu ngân',       cls: 'bg-brand-500/20 text-brand-300' },
+  role_warehouse_staff:  { label: 'Kho vận',        cls: 'bg-green-500/20 text-green-300' },
 }
 
 export default function Sidebar({ collapsed }) {

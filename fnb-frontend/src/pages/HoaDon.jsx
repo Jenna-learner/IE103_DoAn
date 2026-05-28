@@ -3,17 +3,20 @@
  *
  * Tính năng:
  *   - Bảng danh sách đơn hàng, sắp xếp theo ngày mới nhất
- *   - Lọc: theo ngày, theo trạng thái (Tất cả / Completed / Cancelled / Pending)
- *   - Tìm kiếm: theo mã HĐ hoặc tên/SĐT khách hàng
- *   - Click hàng → popup chi tiết (OrderDetailModal)
- *   - Quản lý/Admin: có nút Huỷ đơn ngay trong modal
- *   - Tổng kết nhanh ở đầu trang (doanh thu ngày, số đơn, đơn huỷ)
+ *   - Lọc theo: từ khoá (mã HĐ / SĐT / tên KH), trạng thái, ngày, chi nhánh
+ *   - Bộ lọc chi nhánh CHỈ hiển thị với role_admin & role_readonly
+ *   - Click hàng → navigate sang /hoa-don/:maHD (trang chi tiết riêng)
+ *   - KPI strip: doanh thu hôm nay, đơn hoàn thành, đơn huỷ
  *
  * USE_MOCK = true  → dùng MOCK_ORDERS (không cần backend)
- * USE_MOCK = false → gọi GET /api/v1/hoa-don
+ * USE_MOCK = false → GET /api/v1/hoa-don
  */
 import { useState, useEffect, useMemo } from 'react'
-import { Search, Filter, RefreshCw, TrendingUp, ShoppingBag, XCircle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Search, RefreshCw, TrendingUp, ShoppingBag,
+  XCircle, ChevronLeft, ChevronRight, ChevronRight as ArrowRow,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
@@ -21,18 +24,24 @@ import api from '../lib/api'
 import { MOCK_ORDERS } from '../lib/mock'
 import { fmtCurrency } from '../lib/format'
 import { useAuthStore } from '../store/authStore'
-import OrderDetailModal from '../components/hoadon/OrderDetailModal'
 
-/* ─── Feature flag ───────────────────────────────────────────────────────── */
+/* ── Feature flag ─────────────────────────────────────────────────────────── */
 const USE_MOCK = true
 const PAGE_SIZE = 10
 
-/* ─── Helper ─────────────────────────────────────────────────────────────── */
+/* ── Mock danh sách chi nhánh (để lọc khi admin) ─────────────────────────── */
+const MOCK_BRANCHES = [
+  { MaCN: 'CN001', TenCN: 'Chi nhánh Quận 1' },
+  { MaCN: 'CN002', TenCN: 'Chi nhánh Quận 3' },
+  { MaCN: 'CN003', TenCN: 'Chi nhánh Bình Thạnh' },
+]
+
+/* ── Helpers ──────────────────────────────────────────────────────────────── */
 const STATUS_OPTIONS = [
-  { value: '',          label: 'Tất cả'      },
-  { value: 'Completed', label: 'Hoàn thành'  },
-  { value: 'Pending',   label: 'Đang xử lý'  },
-  { value: 'Cancelled', label: 'Đã huỷ'      },
+  { value: '',          label: 'Tất cả trạng thái' },
+  { value: 'Completed', label: 'Hoàn thành'         },
+  { value: 'Pending',   label: 'Đang xử lý'         },
+  { value: 'Cancelled', label: 'Đã huỷ'             },
 ]
 
 const STATUS_STYLE = {
@@ -41,23 +50,16 @@ const STATUS_STYLE = {
   Cancelled: 'bg-red-100 text-red-600',
 }
 const STATUS_LABEL = { Completed: 'Hoàn thành', Pending: 'Đang xử lý', Cancelled: 'Đã huỷ' }
-
 const PAY_ICON = { Cash: '💵', Card: '💳', 'E-Wallet': '📱' }
 
 function fmtDateTime(iso) {
-  const d = new Date(iso)
-  return d.toLocaleString('vi-VN', {
+  return new Date(iso).toLocaleString('vi-VN', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })
 }
 
-function fmtDate(iso) {
-  const d = new Date(iso)
-  return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
-
-/* ─── KPI card nhỏ ─────────────────────────────────────────────────────── */
+/* ── KPI card ─────────────────────────────────────────────────────────────── */
 function KpiCard({ icon, label, value, color }) {
   return (
     <div className="card flex items-center gap-3">
@@ -72,25 +74,27 @@ function KpiCard({ icon, label, value, color }) {
   )
 }
 
-/* ─── Main page ─────────────────────────────────────────────────────────── */
+/* ── Main ─────────────────────────────────────────────────────────────────── */
 export default function HoaDon() {
-  const { user } = useAuthStore()
+  const navigate      = useNavigate()
+  const { user }      = useAuthStore()
 
-  // ── State ──
-  const [orders, setOrders]           = useState([])
-  const [loading, setLoading]         = useState(false)
-  const [selectedOrder, setSelected]  = useState(null)   // order đang xem chi tiết
-  const [page, setPage]               = useState(1)
-  const [totalCount, setTotalCount]   = useState(0)
+  // Chỉ role_admin & quản lý thấy bộ lọc chi nhánh
+  const showBranchFilter = ['role_admin', 'role_readonly'].includes(user?.vaiTro)
+
+  /* ── State ── */
+  const [orders,     setOrders]     = useState([])
+  const [loading,    setLoading]    = useState(false)
+  const [page,       setPage]       = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
 
   // Filters
-  const [search, setSearch]           = useState('')
-  const [filterStatus, setStatus]     = useState('')
-  const [filterDate, setFilterDate]   = useState('')      // 'YYYY-MM-DD'
+  const [search,        setSearch]        = useState('')
+  const [filterStatus,  setFilterStatus]  = useState('')
+  const [filterDate,    setFilterDate]    = useState('')
+  const [filterBranch,  setFilterBranch]  = useState('')  // chỉ admin/ql dùng
 
-  const canCancel = ['admin', 'quan_ly_chinhanh'].includes(user?.vaiTro)
-
-  // ── Fetch ──
+  /* ── Load ── */
   const loadOrders = async () => {
     setLoading(true)
     try {
@@ -102,6 +106,7 @@ export default function HoaDon() {
         const params = { page, limit: PAGE_SIZE }
         if (filterStatus) params.trangThai = filterStatus
         if (filterDate)   params.ngay      = filterDate
+        if (filterBranch && showBranchFilter) params.maCN = filterBranch
         const data = await api.get('/hoa-don', { params })
         setOrders(data.rows || data.data || [])
         setTotalCount(data.total || 0)
@@ -113,13 +118,14 @@ export default function HoaDon() {
     }
   }
 
-  useEffect(() => { loadOrders() }, [page, filterStatus, filterDate])
+  useEffect(() => { loadOrders() }, [page, filterStatus, filterDate, filterBranch])
 
-  // ── Lọc + tìm kiếm (client-side khi mock) ──
+  /* ── Lọc client-side (mock) ── */
   const filtered = useMemo(() => {
     let list = orders
     if (filterStatus) list = list.filter(o => o.TrangThai === filterStatus)
     if (filterDate)   list = list.filter(o => o.NgayLap.startsWith(filterDate))
+    if (filterBranch && showBranchFilter) list = list.filter(o => o.MaCN === filterBranch)
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(o =>
@@ -129,82 +135,50 @@ export default function HoaDon() {
       )
     }
     return list
-  }, [orders, filterStatus, filterDate, search])
+  }, [orders, filterStatus, filterDate, filterBranch, search])
 
-  // Phân trang client-side khi mock
   const pagedOrders = USE_MOCK
     ? filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
     : filtered
 
-  const totalPages = USE_MOCK
-    ? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-    : Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(
+    USE_MOCK ? filtered.length / PAGE_SIZE : totalCount / PAGE_SIZE
+  ))
 
-  // ── KPI (tính từ mock) ──
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const todayOrders     = orders.filter(o => o.NgayLap.startsWith(todayStr))
-  const todayRevenue    = todayOrders.filter(o => o.TrangThai === 'Completed').reduce((s, o) => s + o.TongThanhToan, 0)
-  const todayCompleted  = todayOrders.filter(o => o.TrangThai === 'Completed').length
-  const todayCancelled  = todayOrders.filter(o => o.TrangThai === 'Cancelled').length
+  /* ── KPI ── */
+  const todayStr       = new Date().toISOString().slice(0, 10)
+  const todayOrders    = orders.filter(o => o.NgayLap.startsWith(todayStr))
+  const todayRevenue   = todayOrders.filter(o => o.TrangThai === 'Completed').reduce((s, o) => s + o.TongThanhToan, 0)
+  const todayCompleted = todayOrders.filter(o => o.TrangThai === 'Completed').length
+  const todayCancelled = todayOrders.filter(o => o.TrangThai === 'Cancelled').length
 
-  // ── Xử lý huỷ đơn ──
-  const handleCancel = async (maHD) => {
-    if (!window.confirm(`Bạn có chắc muốn huỷ đơn hàng ${maHD}?`)) return
-    try {
-      if (USE_MOCK) {
-        await new Promise(r => setTimeout(r, 400))
-        setOrders(prev => prev.map(o => o.MaHD === maHD ? { ...o, TrangThai: 'Cancelled' } : o))
-        setSelected(prev => prev?.MaHD === maHD ? { ...prev, TrangThai: 'Cancelled' } : prev)
-        toast.success('Đã huỷ hóa đơn')
-      } else {
-        await api.patch(`/hoa-don/${maHD}/huy`)
-        toast.success('Đã huỷ hóa đơn và hoàn kho')
-        loadOrders()
-        setSelected(null)
-      }
-    } catch {
-      toast.error('Không thể huỷ hóa đơn')
-    }
-  }
+  /* ── Reset ── */
+  const hasFilter = search || filterStatus || filterDate || filterBranch
+  const resetFilters = () => { setSearch(''); setFilterStatus(''); setFilterDate(''); setFilterBranch(''); setPage(1) }
 
-  // ── Reset filters ──
-  const resetFilters = () => {
-    setSearch('')
-    setStatus('')
-    setFilterDate('')
-    setPage(1)
-  }
-
-  const hasFilter = search || filterStatus || filterDate
-
+  /* ── Render ── */
   return (
     <div className="h-full flex flex-col gap-4 overflow-hidden">
 
-      {/* ── KPI strip ── */}
+      {/* KPI strip */}
       <div className="grid grid-cols-3 gap-3 shrink-0">
         <KpiCard
           icon={<TrendingUp size={18} className="text-green-600" />}
-          label="Doanh thu hôm nay"
-          value={fmtCurrency(todayRevenue)}
-          color="bg-green-50"
+          label="Doanh thu hôm nay" value={fmtCurrency(todayRevenue)} color="bg-green-50"
         />
         <KpiCard
           icon={<ShoppingBag size={18} className="text-brand-600" />}
-          label="Đơn hoàn thành"
-          value={`${todayCompleted} đơn`}
-          color="bg-amber-50"
+          label="Đơn hoàn thành" value={`${todayCompleted} đơn`} color="bg-amber-50"
         />
         <KpiCard
           icon={<XCircle size={18} className="text-red-500" />}
-          label="Đơn bị huỷ"
-          value={`${todayCancelled} đơn`}
-          color="bg-red-50"
+          label="Đơn bị huỷ" value={`${todayCancelled} đơn`} color="bg-red-50"
         />
       </div>
 
-      {/* ── Bộ lọc ── */}
+      {/* Bộ lọc */}
       <div className="card shrink-0 flex flex-wrap items-center gap-3">
-        {/* Search */}
+        {/* Tìm kiếm */}
         <div className="relative flex-1 min-w-48">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -216,18 +190,16 @@ export default function HoaDon() {
           />
         </div>
 
-        {/* Lọc trạng thái */}
+        {/* Trạng thái */}
         <select
           value={filterStatus}
-          onChange={e => { setStatus(e.target.value); setPage(1) }}
-          className="input text-sm w-40"
+          onChange={e => { setFilterStatus(e.target.value); setPage(1) }}
+          className="input text-sm w-44"
         >
-          {STATUS_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
+          {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
 
-        {/* Lọc ngày */}
+        {/* Ngày */}
         <input
           type="date"
           value={filterDate}
@@ -235,11 +207,25 @@ export default function HoaDon() {
           className="input text-sm w-40"
         />
 
+        {/* Chi nhánh — CHỈ admin & quan_ly thấy */}
+        {showBranchFilter && (
+          <select
+            value={filterBranch}
+            onChange={e => { setFilterBranch(e.target.value); setPage(1) }}
+            className="input text-sm w-48"
+          >
+            <option value="">Tất cả chi nhánh</option>
+            {MOCK_BRANCHES.map(b => (
+              <option key={b.MaCN} value={b.MaCN}>{b.TenCN}</option>
+            ))}
+          </select>
+        )}
+
         {/* Reset */}
         {hasFilter && (
           <button
             onClick={resetFilters}
-            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand-600 transition-colors"
+            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-brand-600 transition-colors shrink-0"
           >
             <RefreshCw size={13} />
             Đặt lại
@@ -247,17 +233,17 @@ export default function HoaDon() {
         )}
       </div>
 
-      {/* ── Bảng danh sách ── */}
+      {/* Bảng */}
       <div className="card flex-1 flex flex-col overflow-hidden p-0">
-        {/* Table header */}
+        {/* Header */}
         <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-gray-50 border-b border-gray-100
                         text-[11px] font-semibold text-gray-400 uppercase tracking-wide rounded-t-xl">
           <div className="col-span-3">Mã hóa đơn</div>
           <div className="col-span-2">Thời gian</div>
-          <div className="col-span-2">Khách hàng</div>
+          <div className="col-span-3">Khách hàng</div>
           <div className="col-span-1 text-center">T.Toán</div>
           <div className="col-span-2 text-right">Tổng tiền</div>
-          <div className="col-span-2 text-center">Trạng thái</div>
+          <div className="col-span-1 text-center">T.Thái</div>
         </div>
 
         {/* Rows */}
@@ -279,23 +265,23 @@ export default function HoaDon() {
           ) : pagedOrders.map(order => (
             <div
               key={order.MaHD}
-              onClick={() => setSelected(order)}
+              onClick={() => navigate(`/hoa-don/${order.MaHD}`)}
               className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-amber-50/40 cursor-pointer
-                         transition-colors text-sm items-center"
+                         transition-colors text-sm items-center group"
             >
-              {/* Mã HĐ */}
+              {/* Mã + chi nhánh */}
               <div className="col-span-3">
-                <p className="font-mono font-semibold text-gray-800 text-xs">{order.MaHD}</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">{order.TenCN}</p>
+                <p className="font-mono font-semibold text-gray-800 text-xs group-hover:text-brand-600 transition-colors">
+                  {order.MaHD}
+                </p>
+                <p className="text-[11px] text-gray-400 mt-0.5 truncate">{order.TenCN}</p>
               </div>
 
               {/* Thời gian */}
-              <div className="col-span-2 text-xs text-gray-500">
-                {fmtDateTime(order.NgayLap)}
-              </div>
+              <div className="col-span-2 text-xs text-gray-500">{fmtDateTime(order.NgayLap)}</div>
 
               {/* Khách hàng */}
-              <div className="col-span-2">
+              <div className="col-span-3">
                 {order.TenKH ? (
                   <>
                     <p className="text-xs font-medium text-gray-700 truncate">{order.TenKH}</p>
@@ -306,7 +292,7 @@ export default function HoaDon() {
                 )}
               </div>
 
-              {/* Phương thức thanh toán */}
+              {/* Phương thức */}
               <div className="col-span-1 text-center text-base">
                 {order.thanhToan ? (PAY_ICON[order.thanhToan.PhuongThuc] || '—') : '—'}
               </div>
@@ -315,14 +301,14 @@ export default function HoaDon() {
               <div className="col-span-2 text-right">
                 <p className="font-semibold text-gray-800 text-xs">{fmtCurrency(order.TongThanhToan)}</p>
                 {order.GiamGia > 0 && (
-                  <p className="text-[11px] text-green-500">-{fmtCurrency(order.GiamGia)}</p>
+                  <p className="text-[11px] text-green-500">−{fmtCurrency(order.GiamGia)}</p>
                 )}
               </div>
 
               {/* Trạng thái */}
-              <div className="col-span-2 flex justify-center">
+              <div className="col-span-1 flex justify-center">
                 <span className={clsx(
-                  'px-2 py-0.5 rounded-full text-[11px] font-semibold',
+                  'px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap',
                   STATUS_STYLE[order.TrangThai] || 'bg-gray-100 text-gray-500'
                 )}>
                   {STATUS_LABEL[order.TrangThai] || order.TrangThai}
@@ -332,12 +318,10 @@ export default function HoaDon() {
           ))}
         </div>
 
-        {/* ── Phân trang ── */}
+        {/* Phân trang */}
         <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm shrink-0">
           <p className="text-gray-400 text-xs">
-            {USE_MOCK
-              ? `${filtered.length} hóa đơn`
-              : `${totalCount} hóa đơn`}
+            {filtered.length} hóa đơn
           </p>
           <div className="flex items-center gap-1">
             <button
@@ -349,6 +333,7 @@ export default function HoaDon() {
             >
               <ChevronLeft size={14} />
             </button>
+
             {Array.from({ length: totalPages }, (_, i) => i + 1)
               .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
               .reduce((acc, p, i, arr) => {
@@ -364,13 +349,12 @@ export default function HoaDon() {
                       onClick={() => setPage(p)}
                       className={clsx(
                         'w-7 h-7 rounded-lg text-xs font-semibold transition-colors',
-                        page === p
-                          ? 'bg-brand-500 text-white'
-                          : 'text-gray-600 hover:bg-gray-100'
+                        page === p ? 'bg-brand-500 text-white' : 'text-gray-600 hover:bg-gray-100'
                       )}
                     >{p}</button>
               )
             }
+
             <button
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
@@ -384,15 +368,6 @@ export default function HoaDon() {
         </div>
       </div>
 
-      {/* ── Modal chi tiết ── */}
-      {selectedOrder && (
-        <OrderDetailModal
-          order={selectedOrder}
-          onClose={() => setSelected(null)}
-          onCancel={handleCancel}
-          canCancel={canCancel}
-        />
-      )}
     </div>
   )
 }

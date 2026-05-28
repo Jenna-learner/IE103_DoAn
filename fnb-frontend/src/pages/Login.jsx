@@ -4,12 +4,24 @@ import { Eye, EyeOff, Coffee, Lock, User, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import useAuthStore from '../store/authStore'
 
+/* ── Feature flag ─────────────────────────────────────────────────────────── */
+const USE_MOCK = true
+
+// Tài khoản mock — dùng khi chưa kết nối DB
+// Key = username đăng nhập, vaiTro = DB role name
+const MOCK_ACCOUNTS = {
+  'admin':    { maTK: 1, maNV: 'NV001', hoTen: 'Trần Yến Nhi',   vaiTro: 'role_admin',           maCN: 'CN001', tenCN: 'Chi nhánh Quận 1', tenDangNhap: 'admin',    matKhau: 'Admin@123'   },
+  'readonly': { maTK: 2, maNV: 'NV002', hoTen: 'Trần Thị Bình',  vaiTro: 'role_readonly',        maCN: 'CN001', tenCN: 'Chi nhánh Quận 1', tenDangNhap: 'readonly', matKhau: 'Readonly@123'},
+  'cashier':  { maTK: 3, maNV: 'NV003', hoTen: 'Lê Văn Cường',   vaiTro: 'role_cashier',         maCN: 'CN001', tenCN: 'Chi nhánh Quận 1', tenDangNhap: 'cashier',  matKhau: 'Cashier@123' },
+  'warehouse':{ maTK: 4, maNV: 'NV005', hoTen: 'Hoàng Minh Đức', vaiTro: 'role_warehouse_staff', maCN: 'CN001', tenCN: 'Chi nhánh Quận 1', tenDangNhap: 'warehouse',matKhau: 'Warehouse@123'},
+}
+
 // Map vai trò → trang mặc định sau đăng nhập
 const ROLE_HOME = {
-  admin:               '/dashboard',
-  quan_ly_chinhanh:    '/dashboard',
-  thu_ngan:            '/pos',
-  kho:                 '/kho/ton-kho',
+  role_admin:           '/dashboard',
+  role_readonly:        '/dashboard',
+  role_cashier:         '/pos',
+  role_warehouse_staff: '/kho/ton-kho',
 }
 
 export default function Login() {
@@ -30,6 +42,23 @@ export default function Login() {
     e.preventDefault()
     if (!form.tenDangNhap || !form.matKhau) {
       setError('Vui lòng nhập đầy đủ thông tin.')
+      return
+    }
+
+    if (USE_MOCK) {
+      // Mock login — kiểm tra tài khoản hardcoded
+      await new Promise(r => setTimeout(r, 500))
+      const account = MOCK_ACCOUNTS[form.tenDangNhap]
+      if (!account || account.matKhau !== form.matKhau) {
+        setError('Tên đăng nhập hoặc mật khẩu không đúng.')
+        return
+      }
+      const mockToken = 'mock-jwt-token-' + account.vaiTro
+      localStorage.setItem('fnb_token', mockToken)
+      // Set store trực tiếp (bypass api call)
+      useAuthStore.setState({ token: mockToken, user: account })
+      toast.success(`Chào mừng, ${account.hoTen}! 👋`)
+      navigate(ROLE_HOME[account.vaiTro] || '/dashboard', { replace: true })
       return
     }
 
@@ -174,11 +203,12 @@ export default function Login() {
           </form>
 
           {/* Hint tài khoản demo */}
-          <div className="mt-8 p-3.5 bg-amber-50 border border-amber-100 rounded-lg">
-            <p className="text-xs font-medium text-amber-800 mb-1">Tài khoản demo:</p>
-            <p className="text-xs text-amber-700 font-mono">
-              admin / Admin@123
-            </p>
+          <div className="mt-8 p-3.5 bg-amber-50 border border-amber-100 rounded-lg space-y-1">
+            <p className="text-xs font-medium text-amber-800 mb-1.5">Tài khoản demo:</p>
+            <p className="text-xs text-amber-700 font-mono">admin / Admin@123 <span className="opacity-60">(role_admin)</span></p>
+            <p className="text-xs text-amber-700 font-mono">readonly / Readonly@123 <span className="opacity-60">(role_readonly)</span></p>
+            <p className="text-xs text-amber-700 font-mono">cashier / Cashier@123 <span className="opacity-60">(role_cashier)</span></p>
+            <p className="text-xs text-amber-700 font-mono">warehouse / Warehouse@123 <span className="opacity-60">(role_warehouse_staff)</span></p>
           </div>
         </div>
       </div>
