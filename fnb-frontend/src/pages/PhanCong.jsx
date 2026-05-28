@@ -95,7 +95,7 @@ function NVChip({ nv, onRemove, canEdit }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function PhanCong() {
   const user = useAuthStore((s) => s.user)
-  const canEdit = ['role_admin', 'role_readonly'].includes(user?.vaiTro)
+  const canEdit = ['role_admin'].includes(user?.vaiTro)
 
   // State tuần hiện tại
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()))

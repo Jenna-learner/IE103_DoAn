@@ -5,7 +5,7 @@
  * Luồng nghiệp vụ:
  *   - Tạo: kho + quản lý + role_admin → tạo phiếu Draft
  *   - Duyệt (→ Approved): quản lý + role_admin → trigger tăng tồn kho
- *   - Huỷ (→ Cancelled): quản lý + role_admin
+ *   - Xoá phiếu Draft: role_admin
  *
  * Cấu trúc trang:
  *   - Thanh lọc + nút "Tạo phiếu nhập"
@@ -33,14 +33,12 @@ const USE_MOCK = true
 const STATUS = {
   Draft:     { label: 'Bản nháp',  cls: 'bg-gray-100 text-gray-600'    },
   Approved:  { label: 'Đã duyệt',  cls: 'bg-green-100 text-green-700'  },
-  Cancelled: { label: 'Đã huỷ',    cls: 'bg-red-100 text-red-600'      },
 }
 
 const STATUS_FILTER = [
   { value: '',          label: 'Tất cả'    },
   { value: 'Draft',     label: 'Bản nháp'  },
   { value: 'Approved',  label: 'Đã duyệt'  },
-  { value: 'Cancelled', label: 'Đã huỷ'    },
 ]
 
 function fmtDate(str) {
@@ -161,8 +159,8 @@ function PhieuRow({ phieu, canApprove, onApprove, onCancel }) {
 /* ── Main ─────────────────────────────────────────────────────────────────── */
 export default function PhieuNhap() {
   const { user } = useAuthStore()
-  const canCreate  = ['role_admin', 'role_readonly', 'role_warehouse_staff'].includes(user?.vaiTro)
-  const canApprove = ['role_admin', 'role_readonly'].includes(user?.vaiTro)
+  const canCreate  = ['role_admin', 'role_warehouse_staff'].includes(user?.vaiTro)
+  const canApprove = ['role_admin'].includes(user?.vaiTro)
 
   const [phieuList, setPhieuList] = useState(MOCK_PHIEU_NHAP)
   const [showForm,  setShowForm]  = useState(false)
@@ -246,8 +244,8 @@ export default function PhieuNhap() {
   const handleCancel = async (maPN) => {
     if (!window.confirm(`Huỷ phiếu ${maPN}?`)) return
     await new Promise(r => setTimeout(r, 300))
-    setPhieuList(p => p.map(x => x.MaPN === maPN ? { ...x, TrangThai: 'Cancelled' } : x))
-    toast.success('Đã huỷ phiếu nhập')
+    setPhieuList(p => p.filter(x => x.MaPN !== maPN))
+    toast.success('Đã xoá phiếu nháp')
   }
 
   const draftCount = phieuList.filter(p => p.TrangThai === 'Draft').length

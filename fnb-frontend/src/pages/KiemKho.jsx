@@ -128,7 +128,7 @@ function PhieuDetail({ phieu, canApprove, onApprove, onReject }) {
 /* ── Main ─────────────────────────────────────────────────────────────────── */
 export default function KiemKho() {
   const { user } = useAuthStore()
-  const canApprove = ['role_admin', 'role_readonly'].includes(user?.vaiTro)
+  const canApprove = ['role_admin'].includes(user?.vaiTro)
 
   // Danh sách phiếu kiểm kho (mock state)
   const [phieuList, setPhieuList] = useState([

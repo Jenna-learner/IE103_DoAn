@@ -111,7 +111,7 @@ export default function App() {
 
           {/* Quản lý */}
           <Route path="phieu-nhap" element={<ProtectedRoute roles={['role_admin','role_readonly','role_warehouse_staff']}><PhieuNhap /></ProtectedRoute>} />
-          <Route path="phan-cong"  element={<ProtectedRoute roles={MANAGER}><PhanCong /></ProtectedRoute>} />
+          <Route path="phan-cong"  element={<ProtectedRoute roles={ADMIN}><PhanCong /></ProtectedRoute>} />
           <Route path="phieu-chi"  element={<ProtectedRoute roles={ALL}><PhieuChi /></ProtectedRoute>} />
           <Route path="bao-cao"    element={<ProtectedRoute roles={MANAGER}><ComingSoon /></ProtectedRoute>} />
 

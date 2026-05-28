@@ -50,13 +50,12 @@ const MENU = {
         { to: '/kho/kiem-kho',       icon: ScanLine,      label: 'Kiểm kho' },
         { to: '/phieu-nhap',         icon: Truck,         label: 'Phiếu nhập hàng' },
     ]},
-    { group: 'Nhân sự',     items: [
-        { to: '/phan-cong',          icon: CalendarDays,  label: 'Phân công ca' },
+    { group: 'Vận hành',    items: [
         { to: '/phieu-chi',          icon: Receipt,       label: 'Phiếu chi' },
+        { to: '/hoa-don',            icon: FileText,      label: 'Lịch sử Hóa đơn' },
     ]},
     { group: 'Báo cáo',     items: [
         { to: '/bao-cao',            icon: BarChart2,     label: 'Báo cáo' },
-        { to: '/hoa-don',            icon: FileText,      label: 'Lịch sử Hóa đơn' },
     ]},
   ],
   role_cashier: [

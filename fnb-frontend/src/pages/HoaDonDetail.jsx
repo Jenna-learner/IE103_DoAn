@@ -67,7 +67,7 @@ export default function HoaDonDetail() {
   const [cancelling, setCancelling] = useState(false)
 
   // role_cashier + role_admin + quan_ly đều được huỷ
-  const canCancel = ['role_admin', 'role_readonly', 'role_cashier'].includes(user?.vaiTro)
+  const canCancel = ['role_admin', 'role_cashier'].includes(user?.vaiTro)
 
   /* ── Load ── */
   useEffect(() => {

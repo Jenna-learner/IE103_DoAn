@@ -174,7 +174,7 @@ function PhieuRow({ pc, canApprove, currentUser, onApprove, onReject, onCancel }
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function PhieuChi() {
   const user = useAuthStore((s) => s.user)
-  const canApprove = ['role_admin', 'role_readonly'].includes(user?.vaiTro)
+  const canApprove = ['role_admin'].includes(user?.vaiTro)
 
   const [records, setRecords] = useState(USE_MOCK ? MOCK_PHIEU_CHI : [])
   const [filterStatus, setFilterStatus]   = useState('all')
