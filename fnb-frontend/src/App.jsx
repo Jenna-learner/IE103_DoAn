@@ -13,7 +13,6 @@
  *     /phieu-nhap       → Phiếu nhập
  *     /phan-cong        → Phân công ca
  *     /phieu-chi        → Phiếu chi
- *     /bao-cao          → Báo cáo
  *     /san-pham         → Sản phẩm
  *     /chi-nhanh        → Chi nhánh
  *     /nhan-vien        → Nhân viên
@@ -35,7 +34,12 @@ import KiemKho        from './pages/KiemKho'
 import PhieuNhap     from './pages/PhieuNhap'
 import PhanCong      from './pages/PhanCong'
 import PhieuChi      from './pages/PhieuChi'
+import SanPham       from './pages/SanPham'
+import ChiNhanh      from './pages/ChiNhanh'
+import NhanVien      from './pages/NhanVien'
+import NhaCungCap    from './pages/NhaCungCap'
 import ComingSoon     from './pages/ComingSoon'
+import { normalizeRole } from './lib/roles'
 
 // Tất cả vai trò
 const ALL = ['role_admin', 'role_readonly', 'role_cashier', 'role_warehouse_staff']
@@ -55,7 +59,7 @@ const ROLE_HOME = {
 // Redirect thông minh: về đúng trang theo vai trò thay vì luôn /dashboard
 function SmartRedirect() {
   const user = useAuthStore((s) => s.user)
-  const home = ROLE_HOME[user?.vaiTro] || '/dashboard'
+  const home = ROLE_HOME[normalizeRole(user?.vaiTro)] || '/dashboard'
   return <Navigate to={home} replace />
 }
 
@@ -113,12 +117,12 @@ export default function App() {
           <Route path="phieu-nhap" element={<ProtectedRoute roles={['role_admin','role_readonly','role_warehouse_staff']}><PhieuNhap /></ProtectedRoute>} />
           <Route path="phan-cong"  element={<ProtectedRoute roles={ADMIN}><PhanCong /></ProtectedRoute>} />
           <Route path="phieu-chi"  element={<ProtectedRoute roles={ALL}><PhieuChi /></ProtectedRoute>} />
-          <Route path="bao-cao"    element={<ProtectedRoute roles={MANAGER}><ComingSoon /></ProtectedRoute>} />
+          <Route path="nha-cung-cap" element={<ProtectedRoute roles={ADMIN}><NhaCungCap /></ProtectedRoute>} />
 
-          {/* Admin only */}
-          <Route path="san-pham"   element={<ProtectedRoute roles={ADMIN}><ComingSoon /></ProtectedRoute>} />
-          <Route path="chi-nhanh"  element={<ProtectedRoute roles={ADMIN}><ComingSoon /></ProtectedRoute>} />
-          <Route path="nhan-vien"  element={<ProtectedRoute roles={ADMIN}><ComingSoon /></ProtectedRoute>} />
+          {/* Quản trị dữ liệu */}
+          <Route path="san-pham"   element={<ProtectedRoute roles={MANAGER}><SanPham /></ProtectedRoute>} />
+          <Route path="chi-nhanh"  element={<ProtectedRoute roles={ADMIN}><ChiNhanh /></ProtectedRoute>} />
+          <Route path="nhan-vien"  element={<ProtectedRoute roles={ADMIN}><NhanVien /></ProtectedRoute>} />
 
           {/* 404 trong app */}
           <Route path="*" element={<ComingSoon />} />

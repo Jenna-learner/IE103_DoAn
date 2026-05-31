@@ -205,6 +205,18 @@ export const MOCK_NHA_CUNG_CAP = [
   { MaNCC: 'NCC004', TenNCC: 'Cty CP Bao Bì Tân Tiến',      SDT: '02838654321', DiaChi: '120 Cộng Hòa, Tân Bình' },
 ]
 
+export const MOCK_BRANCHES = [
+  { MaCN: 'CN001', TenCN: 'Chi nhánh Quận 1', DiaChi: '12 Nguyễn Huệ, Quận 1', SDT: '02838222222', Email: 'q1@fnbchain.vn', TrangThai: 'Active' },
+  { MaCN: 'CN002', TenCN: 'Chi nhánh Bình Thạnh', DiaChi: '45 Điện Biên Phủ, Bình Thạnh', SDT: '02838333333', Email: 'binhthanh@fnbchain.vn', TrangThai: 'Active' },
+  { MaCN: 'CN003', TenCN: 'Chi nhánh Thủ Đức', DiaChi: '88 Võ Văn Ngân, Thủ Đức', SDT: '02838444444', Email: 'thuduc@fnbchain.vn', TrangThai: 'Inactive' },
+]
+
+export const MOCK_DEPARTMENTS = [
+  { MaBP: 'BP001', TenBP: 'Bán hàng', MoTa: 'Thu ngân và phục vụ tại quầy' },
+  { MaBP: 'BP002', TenBP: 'Kho vận', MoTa: 'Quản lý nhập hàng và tồn kho' },
+  { MaBP: 'BP003', TenBP: 'Vận hành', MoTa: 'Điều phối ca và vận hành chi nhánh' },
+]
+
 // ─── Mock phiếu nhập hàng ────────────────────────────────────────────────────
 export const MOCK_PHIEU_NHAP = [
   {

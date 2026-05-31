@@ -10,11 +10,12 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingCart, FileText, Users, Package,
-  ClipboardList, Truck, CalendarDays, Receipt, BarChart2,
-  Building2, Coffee, UserCog, ChevronRight, ScanLine,
+  ClipboardList, Truck, CalendarDays, Receipt,
+  Building2, Coffee, UserCog, ScanLine, Factory,
 } from 'lucide-react'
 import clsx from 'clsx'
 import useAuthStore from '../store/authStore'
+import { normalizeRole } from '../lib/roles'
 
 // ── Định nghĩa menu theo vai trò ──────────────────────────
 const MENU = {
@@ -37,8 +38,8 @@ const MENU = {
         { to: '/nhan-vien',          icon: UserCog,       label: 'Nhân viên' },
     ]},
     { group: 'Hệ thống',    items: [
-        { to: '/bao-cao',            icon: BarChart2,     label: 'Báo cáo' },
         { to: '/san-pham',           icon: Coffee,        label: 'Sản phẩm' },
+        { to: '/nha-cung-cap',       icon: Factory,       label: 'Nhà cung cấp' },
         { to: '/chi-nhanh',          icon: Building2,     label: 'Chi nhánh' },
     ]},
   ],
@@ -54,8 +55,8 @@ const MENU = {
         { to: '/phieu-chi',          icon: Receipt,       label: 'Phiếu chi' },
         { to: '/hoa-don',            icon: FileText,      label: 'Lịch sử Hóa đơn' },
     ]},
-    { group: 'Báo cáo',     items: [
-        { to: '/bao-cao',            icon: BarChart2,     label: 'Báo cáo' },
+    { group: 'Danh mục',    items: [
+        { to: '/san-pham',           icon: Coffee,        label: 'Sản phẩm' },
     ]},
   ],
   role_cashier: [
@@ -85,8 +86,9 @@ const ROLE_BADGE = {
 
 export default function Sidebar({ collapsed }) {
   const user   = useAuthStore((s) => s.user)
-  const groups = MENU[user?.vaiTro] || []
-  const badge  = ROLE_BADGE[user?.vaiTro] || { label: user?.vaiTro, cls: 'bg-gray-500/20 text-gray-300' }
+  const role   = normalizeRole(user?.vaiTro)
+  const groups = MENU[role] || []
+  const badge  = ROLE_BADGE[role] || { label: role, cls: 'bg-gray-500/20 text-gray-300' }
 
   return (
     <aside

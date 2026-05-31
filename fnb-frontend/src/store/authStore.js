@@ -6,6 +6,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import api from '../lib/api'
+import { normalizeRole, normalizeUser } from '../lib/roles'
 
 const useAuthStore = create(
   persist(
@@ -20,9 +21,10 @@ const useAuthStore = create(
         try {
           const res = await api.post('/auth/login', { tenDangNhap, matKhau })
           const { token, user } = res.data
+          const normalizedUser = normalizeUser(user)
           localStorage.setItem('fnb_token', token)
-          set({ token, user, isLoading: false })
-          return { ok: true, user }
+          set({ token, user: normalizedUser, isLoading: false })
+          return { ok: true, user: normalizedUser }
         } catch (err) {
           set({ isLoading: false })
           return { ok: false, message: err.message }
@@ -39,7 +41,7 @@ const useAuthStore = create(
       // ── Kiểm tra quyền ──────────────────────────────────
       hasRole: (...roles) => {
         const { user } = get()
-        return user ? roles.includes(user.vaiTro) : false
+        return user ? roles.includes(normalizeRole(user.vaiTro)) : false
       },
 
       isAuthenticated: () => !!get().token,

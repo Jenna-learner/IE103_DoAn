@@ -5,6 +5,7 @@
  */
 import { Navigate } from 'react-router-dom'
 import useAuthStore from '../store/authStore'
+import { normalizeRole } from '../lib/roles'
 
 const VALID_ROLES = ['role_admin', 'role_cashier', 'role_warehouse_staff', 'role_readonly']
 
@@ -12,18 +13,19 @@ export default function ProtectedRoute({ children, roles }) {
   const token  = useAuthStore((s) => s.token)
   const user   = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
+  const role   = normalizeRole(user?.vaiTro)
 
   if (!token || !user) {
     return <Navigate to="/login" replace />
   }
 
   // Role không hợp lệ (session cũ trước khi đổi tên) → logout + về login
-  if (!VALID_ROLES.includes(user.vaiTro)) {
+  if (!VALID_ROLES.includes(role)) {
     logout()
     return <Navigate to="/login" replace />
   }
 
-  if (roles && !roles.includes(user.vaiTro)) {
+  if (roles && !roles.includes(role)) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
         <div className="text-center">

@@ -19,7 +19,7 @@ const PAGE_TITLE = {
   '/phieu-nhap':     'Phiếu Nhập hàng',
   '/phan-cong':      'Phân công Ca làm việc',
   '/phieu-chi':      'Phiếu Chi vận hành',
-  '/bao-cao':        'Báo cáo & Thống kê',
+  '/nha-cung-cap':   'Quản lý Nhà cung cấp',
   '/san-pham':       'Quản lý Sản phẩm',
   '/chi-nhanh':      'Chi nhánh & Bộ phận',
   '/nhan-vien':      'Quản lý Nhân viên',
