@@ -14,7 +14,7 @@
  *   orderHistory array    (các đơn hàng của KH, để hiển thị khi view)
  */
 import { useState, useEffect } from 'react'
-import { X, User, Phone, Star, Award, ShoppingBag, Edit2, Check } from 'lucide-react'
+import { X, User, Phone, Star, Award, ShoppingBag, Check } from 'lucide-react'
 import clsx from 'clsx'
 import { fmtCurrency } from '../../lib/format'
 
@@ -23,10 +23,10 @@ const MEMBERSHIP = {
   Bronze:  { cls: 'bg-orange-100 text-orange-700 border-orange-200', icon: '🥉', label: 'Bronze'  },
   Silver:  { cls: 'bg-gray-100 text-gray-700 border-gray-200',       icon: '🥈', label: 'Silver'  },
   Gold:    { cls: 'bg-yellow-100 text-yellow-700 border-yellow-200', icon: '🥇', label: 'Gold'    },
-  Diamond: { cls: 'bg-blue-100 text-blue-700 border-blue-200',       icon: '💎', label: 'Diamond' },
+  Platinum: { cls: 'bg-blue-100 text-blue-700 border-blue-200',      icon: '💎', label: 'Platinum' },
 }
 
-const HANG_OPTIONS = ['Bronze', 'Silver', 'Gold', 'Diamond']
+const HANG_OPTIONS = ['Bronze', 'Silver', 'Gold', 'Platinum']
 
 function fmtDate(str) {
   if (!str) return '—'
@@ -61,7 +61,6 @@ export default function KhachHangModal({ customer, mode: initMode, onClose, onSa
   const handleSave = async () => {
     if (!validate()) return
     setSaving(true)
-    await new Promise(r => setTimeout(r, 300)) // mock delay
     onSave({ TenKH: tenKH.trim(), SDT: sdt.trim(), DiemTichLuy: Number(diem), HangThanhVien: hang })
     setSaving(false)
   }
@@ -264,15 +263,7 @@ export default function KhachHangModal({ customer, mode: initMode, onClose, onSa
         {/* ── Footer ── */}
         <div className="px-5 py-3 border-t border-gray-100 flex justify-end gap-2">
           {mode === 'view' ? (
-            <>
-              <button onClick={onClose} className="btn-secondary text-sm px-4 py-1.5">Đóng</button>
-              <button
-                onClick={() => setMode('edit')}
-                className="btn-primary flex items-center gap-1.5 text-sm px-4 py-1.5"
-              >
-                <Edit2 size={13} /> Chỉnh sửa
-              </button>
-            </>
+            <button onClick={onClose} className="btn-secondary text-sm px-4 py-1.5">Đóng</button>
           ) : (
             <>
               <button

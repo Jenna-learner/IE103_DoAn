@@ -4,12 +4,10 @@
  * Tính năng:
  *   - Bảng danh sách đơn hàng, sắp xếp theo ngày mới nhất
  *   - Lọc theo: từ khoá (mã HĐ / SĐT / tên KH), trạng thái, ngày, chi nhánh
- *   - Bộ lọc chi nhánh CHỈ hiển thị với role_admin & role_readonly
+ *   - Bộ lọc chi nhánh CHỈ hiển thị với admin & giám đốc vận hành
  *   - Click hàng → navigate sang /hoa-don/:maHD (trang chi tiết riêng)
  *   - KPI strip: doanh thu hôm nay, đơn hoàn thành, đơn huỷ
  *
- * USE_MOCK = true  → dùng MOCK_ORDERS (không cần backend)
- * USE_MOCK = false → GET /api/v1/hoa-don
  */
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -21,20 +19,11 @@ import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 import api from '../lib/api'
-import { MOCK_ORDERS } from '../lib/mock'
 import { fmtCurrency } from '../lib/format'
 import { useAuthStore } from '../store/authStore'
+import { ROLE } from '../lib/roles'
 
-/* ── Feature flag ─────────────────────────────────────────────────────────── */
-const USE_MOCK = true
 const PAGE_SIZE = 10
-
-/* ── Mock danh sách chi nhánh (để lọc khi admin) ─────────────────────────── */
-const MOCK_BRANCHES = [
-  { MaCN: 'CN001', TenCN: 'Chi nhánh Quận 1' },
-  { MaCN: 'CN002', TenCN: 'Chi nhánh Quận 3' },
-  { MaCN: 'CN003', TenCN: 'Chi nhánh Bình Thạnh' },
-]
 
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
 const STATUS_OPTIONS = [
@@ -50,7 +39,7 @@ const STATUS_STYLE = {
   Cancelled: 'bg-red-100 text-red-600',
 }
 const STATUS_LABEL = { Completed: 'Hoàn thành', Pending: 'Đang xử lý', Cancelled: 'Đã huỷ' }
-const PAY_ICON = { Cash: '💵', Card: '💳', 'E-Wallet': '📱' }
+const PAY_ICON = { Cash: '💵', Card: '💳', 'E-Wallet': '📱', EWallet: '📱', BankTransfer: '🏦' }
 
 function fmtDateTime(iso) {
   return new Date(iso).toLocaleString('vi-VN', {
@@ -79,14 +68,13 @@ export default function HoaDon() {
   const navigate      = useNavigate()
   const { user }      = useAuthStore()
 
-  // Chỉ role_admin & quản lý thấy bộ lọc chi nhánh
-  const showBranchFilter = ['role_admin', 'role_readonly'].includes(user?.vaiTro)
+  const showBranchFilter = [ROLE.ADMIN, ROLE.OPS_DIRECTOR].includes(user?.vaiTro)
 
   /* ── State ── */
   const [orders,     setOrders]     = useState([])
+  const [branches,   setBranches]   = useState([])
   const [loading,    setLoading]    = useState(false)
   const [page,       setPage]       = useState(1)
-  const [totalCount, setTotalCount] = useState(0)
 
   // Filters
   const [search,        setSearch]        = useState('')
@@ -98,19 +86,12 @@ export default function HoaDon() {
   const loadOrders = async () => {
     setLoading(true)
     try {
-      if (USE_MOCK) {
-        await new Promise(r => setTimeout(r, 300))
-        setOrders(MOCK_ORDERS)
-        setTotalCount(MOCK_ORDERS.length)
-      } else {
-        const params = { page, limit: PAGE_SIZE }
-        if (filterStatus) params.trangThai = filterStatus
-        if (filterDate)   params.ngay      = filterDate
-        if (filterBranch && showBranchFilter) params.maCN = filterBranch
-        const data = await api.get('/hoa-don', { params })
-        setOrders(data.rows || data.data || [])
-        setTotalCount(data.total || 0)
-      }
+      const params = { page: 1, limit: 500 }
+      if (filterStatus) params.trangThai = filterStatus
+      if (filterDate)   params.ngay      = filterDate
+      if (filterBranch && showBranchFilter) params.maCN = filterBranch
+      const data = await api.get('/hoa-don', { params })
+      setOrders(data.data || [])
     } catch {
       toast.error('Không tải được danh sách hóa đơn')
     } finally {
@@ -118,9 +99,20 @@ export default function HoaDon() {
     }
   }
 
-  useEffect(() => { loadOrders() }, [page, filterStatus, filterDate, filterBranch])
+  const loadBranches = async () => {
+    if (!showBranchFilter) return
+    try {
+      const data = await api.get('/chi-nhanh')
+      setBranches(data.data || [])
+    } catch {
+      toast.error('Không tải được danh sách chi nhánh')
+    }
+  }
 
-  /* ── Lọc client-side (mock) ── */
+  useEffect(() => { loadOrders() }, [page, filterStatus, filterDate, filterBranch])
+  useEffect(() => { loadBranches() }, [showBranchFilter])
+
+  /* ── Lọc client-side ── */
   const filtered = useMemo(() => {
     let list = orders
     if (filterStatus) list = list.filter(o => o.TrangThai === filterStatus)
@@ -137,13 +129,9 @@ export default function HoaDon() {
     return list
   }, [orders, filterStatus, filterDate, filterBranch, search])
 
-  const pagedOrders = USE_MOCK
-    ? filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-    : filtered
+  const pagedOrders = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
-  const totalPages = Math.max(1, Math.ceil(
-    USE_MOCK ? filtered.length / PAGE_SIZE : totalCount / PAGE_SIZE
-  ))
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
 
   /* ── KPI ── */
   const todayStr       = new Date().toISOString().slice(0, 10)
@@ -215,7 +203,7 @@ export default function HoaDon() {
             className="input text-sm w-48"
           >
             <option value="">Tất cả chi nhánh</option>
-            {MOCK_BRANCHES.map(b => (
+            {branches.map(b => (
               <option key={b.MaCN} value={b.MaCN}>{b.TenCN}</option>
             ))}
           </select>

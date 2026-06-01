@@ -123,7 +123,7 @@ psql -h 171.249.255.75 -U postgres -d fnb_chain_db -f sql/add_taikhoan.sql
 # Mở Query Tool → paste nội dung sql/add_taikhoan.sql → Execute (F5)
 ```
 
-Sau khi chạy, tài khoản admin mặc định: **admin / Admin@123** (gắn với NV001)
+Sau khi chạy, tài khoản admin mặc định: **admin@fnbchain.com / admin@123** (gắn với NV001)
 
 ---
 
@@ -244,6 +244,7 @@ Kết quả mong đợi:
 | VaiTro | Mô tả | Quyền chính |
 |--------|-------|-------------|
 | `admin` | Quản trị viên | Toàn quyền |
+| `giam_doc_van_hanh` | Giám đốc vận hành | Dashboard chuỗi, giám sát, duyệt vận hành |
 | `quan_ly_chinhanh` | Quản lý chi nhánh | Quản lý chi nhánh của mình |
 | `thu_ngan` | Thu ngân POS | Tạo hóa đơn, tra cứu khách hàng |
 | `kho` | Nhân viên kho | Xem tồn kho, nhập phiếu |

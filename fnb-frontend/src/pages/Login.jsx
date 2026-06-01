@@ -1,28 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Coffee, Lock, User, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Lock, User, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import useAuthStore from '../store/authStore'
-
-/* ── Feature flag ─────────────────────────────────────────────────────────── */
-const USE_MOCK = true
-
-// Tài khoản mock — dùng khi chưa kết nối DB
-// Key = username đăng nhập, vaiTro = DB role name
-const MOCK_ACCOUNTS = {
-  'admin':    { maTK: 1, maNV: 'NV001', hoTen: 'Trần Yến Nhi',   vaiTro: 'role_admin',           maCN: 'CN001', tenCN: 'Chi nhánh Quận 1', tenDangNhap: 'admin',    matKhau: 'Admin@123'   },
-  'readonly': { maTK: 2, maNV: 'NV002', hoTen: 'Trần Thị Bình',  vaiTro: 'role_readonly',        maCN: 'CN001', tenCN: 'Chi nhánh Quận 1', tenDangNhap: 'readonly', matKhau: 'Readonly@123'},
-  'cashier':  { maTK: 3, maNV: 'NV003', hoTen: 'Lê Văn Cường',   vaiTro: 'role_cashier',         maCN: 'CN001', tenCN: 'Chi nhánh Quận 1', tenDangNhap: 'cashier',  matKhau: 'Cashier@123' },
-  'warehouse':{ maTK: 4, maNV: 'NV005', hoTen: 'Hoàng Minh Đức', vaiTro: 'role_warehouse_staff', maCN: 'CN001', tenCN: 'Chi nhánh Quận 1', tenDangNhap: 'warehouse',matKhau: 'Warehouse@123'},
-}
-
-// Map vai trò → trang mặc định sau đăng nhập
-const ROLE_HOME = {
-  role_admin:           '/dashboard',
-  role_readonly:        '/dashboard',
-  role_cashier:         '/pos',
-  role_warehouse_staff: '/kho/ton-kho',
-}
+import { ROLE_HOME } from '../lib/roles'
+import logoImg from '../assets/logo.png'
 
 export default function Login() {
   const navigate   = useNavigate()
@@ -45,23 +27,6 @@ export default function Login() {
       return
     }
 
-    if (USE_MOCK) {
-      // Mock login — kiểm tra tài khoản hardcoded
-      await new Promise(r => setTimeout(r, 500))
-      const account = MOCK_ACCOUNTS[form.tenDangNhap]
-      if (!account || account.matKhau !== form.matKhau) {
-        setError('Tên đăng nhập hoặc mật khẩu không đúng.')
-        return
-      }
-      const mockToken = 'mock-jwt-token-' + account.vaiTro
-      localStorage.setItem('fnb_token', mockToken)
-      // Set store trực tiếp (bypass api call)
-      useAuthStore.setState({ token: mockToken, user: account })
-      toast.success(`Chào mừng, ${account.hoTen}! 👋`)
-      navigate(ROLE_HOME[account.vaiTro] || '/dashboard', { replace: true })
-      return
-    }
-
     const res = await login(form.tenDangNhap, form.matKhau)
 
     if (res.ok) {
@@ -79,9 +44,7 @@ export default function Login() {
       <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-gray-900 via-gray-800 to-brand-900 flex-col justify-between p-12">
         {/* Logo */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-brand-500 rounded-xl flex items-center justify-center">
-            <Coffee size={22} className="text-white" />
-          </div>
+          <img src={logoImg} alt="FnB Chain logo" className="w-10 h-10 rounded-xl object-cover" />
           <span className="text-white font-bold text-xl tracking-tight">FnB Chain</span>
         </div>
 
@@ -120,9 +83,7 @@ export default function Login() {
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
           <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <div className="w-9 h-9 bg-brand-500 rounded-xl flex items-center justify-center">
-              <Coffee size={20} className="text-white" />
-            </div>
+            <img src={logoImg} alt="FnB Chain logo" className="w-9 h-9 rounded-xl object-cover" />
             <span className="font-bold text-gray-900 text-lg">FnB Chain</span>
           </div>
 
@@ -202,13 +163,10 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Hint tài khoản demo */}
+          {/* Hint tài khoản */}
           <div className="mt-8 p-3.5 bg-amber-50 border border-amber-100 rounded-lg space-y-1">
-            <p className="text-xs font-medium text-amber-800 mb-1.5">Tài khoản demo:</p>
-            <p className="text-xs text-amber-700 font-mono">admin / Admin@123 <span className="opacity-60">(role_admin)</span></p>
-            <p className="text-xs text-amber-700 font-mono">readonly / Readonly@123 <span className="opacity-60">(role_readonly)</span></p>
-            <p className="text-xs text-amber-700 font-mono">cashier / Cashier@123 <span className="opacity-60">(role_cashier)</span></p>
-            <p className="text-xs text-amber-700 font-mono">warehouse / Warehouse@123 <span className="opacity-60">(role_warehouse_staff)</span></p>
+            <p className="text-xs font-medium text-amber-800 mb-1.5">Đăng nhập bằng tài khoản đã có trong database.</p>
+            <p className="text-xs text-amber-700">Nếu bạn đã seed dữ liệu mẫu backend, có thể dùng tài khoản mặc định <span className="font-mono">admin@fnbchain.com / admin@123</span>.</p>
           </div>
         </div>
       </div>

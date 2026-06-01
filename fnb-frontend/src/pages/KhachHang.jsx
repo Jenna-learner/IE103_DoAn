@@ -4,15 +4,13 @@
  * Tính năng:
  *   - Bảng danh sách: Tên + SĐT, Hạng thành viên, Điểm tích lũy, Ngày tham gia
  *   - Tìm kiếm theo tên hoặc SĐT
- *   - Lọc theo hạng thành viên (Bronze / Silver / Gold / Diamond)
+ *   - Lọc theo hạng thành viên (Bronze / Silver / Gold / Platinum)
  *   - Nút "Thêm khách hàng" → mở modal form
  *   - Click hàng → modal xem chi tiết + lịch sử mua hàng
  *   - Trong modal: nút Chỉnh sửa → sửa hạng + điểm
  *
- * Quyền truy cập: role_admin, role_readonly, role_cashier
+ * Quyền truy cập: admin, quản lý chi nhánh, thu ngân
  *
- * USE_MOCK = true  → dùng MOCK_CUSTOMERS_LIST
- * USE_MOCK = false → GET /api/v1/khach-hang
  */
 import { useState, useEffect, useMemo } from 'react'
 import { Search, UserPlus, RefreshCw, Users, Star, Award, Trophy } from 'lucide-react'
@@ -20,19 +18,15 @@ import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 import api from '../lib/api'
-import { MOCK_CUSTOMERS_LIST, MOCK_ORDERS } from '../lib/mock'
 import { fmtCurrency } from '../lib/format'
 import KhachHangModal from '../components/khachhang/KhachHangModal'
-
-/* ── Feature flag ─────────────────────────────────────────────────────────── */
-const USE_MOCK = true
 
 /* ── Membership config ────────────────────────────────────────────────────── */
 const MEMBERSHIP = {
   Bronze:  { cls: 'bg-orange-100 text-orange-700', icon: '🥉' },
   Silver:  { cls: 'bg-gray-100 text-gray-700',     icon: '🥈' },
   Gold:    { cls: 'bg-yellow-100 text-yellow-700', icon: '🥇' },
-  Diamond: { cls: 'bg-blue-100 text-blue-700',     icon: '💎' },
+  Platinum: { cls: 'bg-blue-100 text-blue-700',    icon: '💎' },
 }
 
 const HANG_FILTER = [
@@ -40,7 +34,7 @@ const HANG_FILTER = [
   { value: 'Bronze',  label: '🥉 Bronze'   },
   { value: 'Silver',  label: '🥈 Silver'   },
   { value: 'Gold',    label: '🥇 Gold'     },
-  { value: 'Diamond', label: '💎 Diamond'  },
+  { value: 'Platinum', label: '💎 Platinum'  },
 ]
 
 function fmtDate(str) {
@@ -66,6 +60,7 @@ function KpiCard({ icon, label, value, color }) {
 /* ── Main ─────────────────────────────────────────────────────────────────── */
 export default function KhachHang() {
   const [customers, setCustomers] = useState([])
+  const [orders, setOrders] = useState([])
   const [loading,   setLoading]   = useState(false)
 
   // Filters
@@ -80,13 +75,12 @@ export default function KhachHang() {
   const loadCustomers = async () => {
     setLoading(true)
     try {
-      if (USE_MOCK) {
-        await new Promise(r => setTimeout(r, 300))
-        setCustomers(MOCK_CUSTOMERS_LIST)
-      } else {
-        const data = await api.get('/khach-hang')
-        setCustomers(data.rows || data.data || [])
-      }
+      const [customerRes, orderRes] = await Promise.all([
+        api.get('/khach-hang', { params: { page: 1, limit: 500 } }),
+        api.get('/hoa-don', { params: { page: 1, limit: 500 } }),
+      ])
+      setCustomers(customerRes.data || [])
+      setOrders(orderRes.data || [])
     } catch {
       toast.error('Không tải được danh sách khách hàng')
     } finally {
@@ -110,15 +104,15 @@ export default function KhachHang() {
   }, [customers, filterHang, search])
 
   /* ── KPI ── */
-  const totalDiamond = customers.filter(c => c.HangThanhVien === 'Diamond').length
+  const totalPlatinum = customers.filter(c => c.HangThanhVien === 'Platinum').length
   const totalGold    = customers.filter(c => c.HangThanhVien === 'Gold').length
   const totalPoints  = customers.reduce((s, c) => s + (c.DiemTichLuy || 0), 0)
 
   /* ── Lịch sử đơn hàng của KH được chọn ── */
   const selectedOrders = useMemo(() => {
     if (!modalCustomer) return []
-    return MOCK_ORDERS.filter(o => o.MaKH === modalCustomer.MaKH)
-  }, [modalCustomer])
+    return orders.filter((o) => o.MaKH === modalCustomer.MaKH)
+  }, [modalCustomer, orders])
 
   /* ── Mở modal ── */
   const openView = (customer) => { setModalCustomer(customer); setModalMode('view') }
@@ -127,33 +121,21 @@ export default function KhachHang() {
   /* ── Lưu (add / edit) ── */
   const handleSave = async (data) => {
     try {
-      if (USE_MOCK) {
-        if (modalMode === 'add') {
-          const newKH = {
-            MaKH: `KH${String(customers.length + 1).padStart(3, '0')}`,
-            ...data,
-            NgayThamGia: new Date().toISOString().slice(0, 10),
-            TongDonHang: 0,
-            TongChiTieu: 0,
-          }
-          setCustomers(prev => [newKH, ...prev])
-          toast.success(`Đã thêm khách hàng ${data.TenKH}`)
-        } else {
-          setCustomers(prev =>
-            prev.map(c => c.MaKH === modalCustomer.MaKH ? { ...c, ...data } : c)
-          )
-          toast.success('Đã cập nhật thông tin khách hàng')
-        }
+      if (modalMode === 'add') {
+        await api.post('/khach-hang', {
+          TenKH: data.TenKH,
+          SDT: data.SDT,
+          Email: data.Email || null,
+        })
+        toast.success('Đã thêm khách hàng mới')
       } else {
-        if (modalMode === 'add') {
-          await api.post('/khach-hang', data)
-          toast.success('Đã thêm khách hàng mới')
-        } else {
-          await api.put(`/khach-hang/${modalCustomer.MaKH}`, data)
-          toast.success('Đã cập nhật thông tin')
-        }
-        loadCustomers()
+        await api.put(`/khach-hang/${modalCustomer.MaKH}`, {
+          TenKH: data.TenKH,
+          Email: data.Email || modalCustomer?.Email || null,
+        })
+        toast.success('Đã cập nhật thông tin')
       }
+      loadCustomers()
       setModalCustomer(null)
     } catch {
       toast.error('Không thể lưu thông tin khách hàng')
@@ -175,7 +157,7 @@ export default function KhachHang() {
         />
         <KpiCard
           icon={<Trophy size={18} className="text-yellow-500" />}
-          label="Gold + Diamond" value={`${totalGold + totalDiamond} người`} color="bg-yellow-50"
+          label="Gold + Platinum" value={`${totalGold + totalPlatinum} người`} color="bg-yellow-50"
         />
         <KpiCard
           icon={<Star size={18} className="text-purple-500" />}

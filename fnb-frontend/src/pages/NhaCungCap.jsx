@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Truck, Plus, RefreshCw, Search, Database, Phone, MapPin, Mail } from 'lucide-react'
+import { Truck, Plus, RefreshCw, Search, Phone, MapPin, Mail } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 import api from '../lib/api'
-import { MOCK_NHA_CUNG_CAP } from '../lib/mock'
-import { isMockSession } from '../lib/mockSession'
 
 const EMPTY_FORM = {
   MaNCC: '',
@@ -34,29 +32,18 @@ export default function NhaCungCap() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [usingFallback, setUsingFallback] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
 
   const loadSuppliers = useCallback(async (showToast = false) => {
     setLoading(true)
-    if (isMockSession()) {
-      setSuppliers(MOCK_NHA_CUNG_CAP.map(normalizeSupplier))
-      setUsingFallback(true)
-      setLoading(false)
-      if (showToast) toast.success('Đã làm mới dữ liệu demo nhà cung cấp')
-      return
-    }
     try {
       const res = await api.get('/nha-cung-cap')
       setSuppliers((res.data || []).map(normalizeSupplier))
-      setUsingFallback(false)
       if (showToast) toast.success('Đã làm mới danh sách nhà cung cấp')
     } catch (err) {
-      setSuppliers(MOCK_NHA_CUNG_CAP.map(normalizeSupplier))
-      setUsingFallback(true)
-      toast.error(err.message || 'Không tải được nhà cung cấp, đang hiển thị dữ liệu demo')
+      toast.error(err.message || 'Không tải được nhà cung cấp')
     } finally {
       setLoading(false)
     }
@@ -108,16 +95,7 @@ export default function NhaCungCap() {
     if (!validate()) return
     setSaving(true)
     try {
-      if (usingFallback) {
-        const payload = normalizeSupplier(form)
-        if (editingId) {
-          setSuppliers((prev) => prev.map((item) => item.MaNCC === editingId ? payload : item))
-          toast.success('Đã cập nhật nhà cung cấp (demo)')
-        } else {
-          setSuppliers((prev) => [payload, ...prev])
-          toast.success('Đã thêm nhà cung cấp (demo)')
-        }
-      } else if (editingId) {
+      if (editingId) {
         const res = await api.put(`/nha-cung-cap/${editingId}`, form)
         toast.success(res.message || 'Đã cập nhật nhà cung cấp')
         await loadSuppliers()
@@ -151,9 +129,7 @@ export default function NhaCungCap() {
         </div>
         <div className="card">
           <p className="text-xs text-gray-400">Nguồn dữ liệu</p>
-          <p className={clsx('text-sm font-semibold mt-2', usingFallback ? 'text-amber-600' : 'text-brand-600')}>
-            {usingFallback ? 'Demo fallback' : 'API backend'}
-          </p>
+          <p className="text-sm font-semibold mt-2 text-brand-600">API backend</p>
         </div>
       </div>
 
@@ -167,12 +143,6 @@ export default function NhaCungCap() {
             className="input pl-8 text-sm"
           />
         </div>
-
-        {usingFallback && (
-          <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-semibold">
-            <Database size={13} /> Dữ liệu demo
-          </span>
-        )}
 
         <button onClick={() => loadSuppliers(true)} className="btn-secondary text-sm px-3 py-2" disabled={loading}>
           <RefreshCw size={14} className={clsx(loading && 'animate-spin')} /> Làm mới

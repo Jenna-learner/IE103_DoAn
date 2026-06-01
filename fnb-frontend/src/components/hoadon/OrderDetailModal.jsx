@@ -7,8 +7,8 @@ import { X, User, Store, CreditCard, Clock, Hash, Printer } from 'lucide-react'
 import { fmtCurrency, membershipStyle, orderStatusStyle } from '../../lib/format'
 import clsx from 'clsx'
 
-const PAY_ICON = { Cash: '💵', Card: '💳', 'E-Wallet': '📱' }
-const PAY_LABEL = { Cash: 'Tiền mặt', Card: 'Thẻ ngân hàng', 'E-Wallet': 'Ví điện tử' }
+const PAY_ICON = { Cash: '💵', Card: '💳', 'E-Wallet': '📱', EWallet: '📱', BankTransfer: '🏦' }
+const PAY_LABEL = { Cash: 'Tiền mặt', Card: 'Thẻ ngân hàng', 'E-Wallet': 'Ví điện tử', EWallet: 'Ví điện tử', BankTransfer: 'Chuyển khoản' }
 
 const StatusBadge = ({ status }) => {
   const map = {

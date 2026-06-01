@@ -23,7 +23,7 @@ async function run() {
     console.log('🔗 Đang kết nối DB...')
     await client.query(sql)
     console.log('✅ Tạo bảng TAIKHOAN thành công!')
-    console.log('✅ Tài khoản admin / Admin@123 đã sẵn sàng.')
+    console.log('✅ Tài khoản admin@fnbchain.com / admin@123 đã sẵn sàng.')
   } catch (err) {
     console.error('❌ Lỗi:', err.message)
   } finally {

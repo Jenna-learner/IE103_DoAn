@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Building2, Plus, RefreshCw, Search, Database, MapPin, Phone, Mail, Layers3 } from 'lucide-react'
+import { Building2, Plus, RefreshCw, Search, MapPin, Phone, Mail, Layers3 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 import api from '../lib/api'
-import { MOCK_BRANCHES, MOCK_DEPARTMENTS } from '../lib/mock'
-import { isMockSession } from '../lib/mockSession'
 
 const EMPTY_BRANCH = {
   MaCN: '',
@@ -47,7 +45,6 @@ export default function ChiNhanh() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [usingFallback, setUsingFallback] = useState(false)
   const [showBranchForm, setShowBranchForm] = useState(false)
   const [editingId, setEditingId] = useState('')
   const [branchForm, setBranchForm] = useState(EMPTY_BRANCH)
@@ -56,14 +53,6 @@ export default function ChiNhanh() {
 
   const loadData = useCallback(async (showToast = false) => {
     setLoading(true)
-    if (isMockSession()) {
-      setBranches(MOCK_BRANCHES.map(normalizeBranch))
-      setDepartments(MOCK_DEPARTMENTS.map(normalizeDepartment))
-      setUsingFallback(true)
-      setLoading(false)
-      if (showToast) toast.success('Đã làm mới dữ liệu demo chi nhánh')
-      return
-    }
     try {
       const [branchRes, departmentRes] = await Promise.all([
         api.get('/chi-nhanh'),
@@ -71,13 +60,9 @@ export default function ChiNhanh() {
       ])
       setBranches((branchRes.data || []).map(normalizeBranch))
       setDepartments((departmentRes.data || []).map(normalizeDepartment))
-      setUsingFallback(false)
       if (showToast) toast.success('Đã làm mới dữ liệu chi nhánh')
     } catch (err) {
-      setBranches(MOCK_BRANCHES.map(normalizeBranch))
-      setDepartments(MOCK_DEPARTMENTS.map(normalizeDepartment))
-      setUsingFallback(true)
-      toast.error(err.message || 'Không tải được dữ liệu chi nhánh, đang hiển thị dữ liệu demo')
+      toast.error(err.message || 'Không tải được dữ liệu chi nhánh')
     } finally {
       setLoading(false)
     }
@@ -115,16 +100,7 @@ export default function ChiNhanh() {
 
     setSaving(true)
     try {
-      if (usingFallback) {
-        const payload = normalizeBranch(branchForm)
-        if (editingId) {
-          setBranches((prev) => prev.map((item) => item.MaCN === editingId ? payload : item))
-          toast.success('Đã cập nhật chi nhánh (demo)')
-        } else {
-          setBranches((prev) => [payload, ...prev])
-          toast.success('Đã thêm chi nhánh (demo)')
-        }
-      } else if (editingId) {
+      if (editingId) {
         const res = await api.put(`/chi-nhanh/${editingId}`, branchForm)
         toast.success(res.message || 'Đã cập nhật chi nhánh')
         await loadData()
@@ -152,14 +128,9 @@ export default function ChiNhanh() {
 
     setSavingDepartment(true)
     try {
-      if (usingFallback) {
-        setDepartments((prev) => [normalizeDepartment(departmentForm), ...prev])
-        toast.success('Đã thêm bộ phận (demo)')
-      } else {
-        const res = await api.post('/chi-nhanh/bo-phan', departmentForm)
-        toast.success(res.message || 'Đã thêm bộ phận')
-        await loadData()
-      }
+      const res = await api.post('/chi-nhanh/bo-phan', departmentForm)
+      toast.success(res.message || 'Đã thêm bộ phận')
+      await loadData()
       setDepartmentForm(EMPTY_DEPARTMENT)
     } catch (err) {
       toast.error(err.message || 'Không thêm được bộ phận')
@@ -192,11 +163,6 @@ export default function ChiNhanh() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm chi nhánh theo mã, tên, địa chỉ..." className="input pl-8 text-sm" />
         </div>
-        {usingFallback && (
-          <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-semibold">
-            <Database size={13} /> Dữ liệu demo
-          </span>
-        )}
         <button onClick={() => loadData(true)} className="btn-secondary text-sm px-3 py-2" disabled={loading}>
           <RefreshCw size={14} className={clsx(loading && 'animate-spin')} /> Làm mới
         </button>

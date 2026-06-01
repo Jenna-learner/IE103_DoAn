@@ -22,7 +22,7 @@ const PAGE_TITLE = {
   '/nha-cung-cap':   'Quản lý Nhà cung cấp',
   '/san-pham':       'Quản lý Sản phẩm',
   '/chi-nhanh':      'Chi nhánh & Bộ phận',
-  '/nhan-vien':      'Quản lý Nhân viên',
+  '/nhan-vien':      'Nhân viên & Tài khoản',
 }
 
 export default function Topbar({ onToggleSidebar }) {

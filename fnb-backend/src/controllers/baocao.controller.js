@@ -18,9 +18,9 @@ const dashboard = async (req, res, next) => {
     const [doanhThu, chiPhi, canhBao] = await Promise.all([
       // Doanh thu từ mv_doanhthu_ngay (Materialized View)
       db.query(
-        `SELECT COALESCE(SUM(TongDoanhThuTho), 0)  AS TongDoanhThuTho,
-                COALESCE(SUM(TongGiamGia),     0)  AS TongGiamGia,
-                COALESCE(SUM(DoanhThuThuan),   0)  AS DoanhThuThuan
+        `SELECT COALESCE(SUM(TongTienHang),   0)  AS TongDoanhThuTho,
+                COALESCE(SUM(TongGiamGia),    0)  AS TongGiamGia,
+                COALESCE(SUM(TongThanhToan),  0)  AS DoanhThuThuan
          FROM mv_doanhthu_ngay
          WHERE Ngay = $1 ${maCN ? "AND MaCN = '" + maCN + "'" : ''}`,
         [ngay]
@@ -60,7 +60,10 @@ const doanhThuTheoNgay = async (req, res, next) => {
     if (maCN) params.push(maCN);
 
     const { rows } = await db.query(
-      `SELECT Ngay, TongDoanhThuTho, TongGiamGia, DoanhThuThuan
+      `SELECT Ngay,
+               TongTienHang  AS TongDoanhThuTho,
+               TongGiamGia,
+               TongThanhToan AS DoanhThuThuan
        FROM mv_doanhthu_ngay
        WHERE TO_CHAR(Ngay,'YYYY-MM') = $1 ${maCNWhere}
        ORDER BY Ngay`,

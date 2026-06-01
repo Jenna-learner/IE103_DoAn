@@ -1,17 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Truck, Plus, ChevronDown, ChevronUp, CheckCircle,
-  XCircle, Trash2, RefreshCw, Search, PackagePlus, Database,
+  XCircle, Trash2, RefreshCw, Search, PackagePlus,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 import api from '../lib/api'
-import { MOCK_PHIEU_NHAP, MOCK_NHA_CUNG_CAP, MOCK_TONKHO } from '../lib/mock'
 import { fmtCurrency, fmtNumber } from '../lib/format'
 import useAuthStore from '../store/authStore'
-import { normalizeRole } from '../lib/roles'
-import { isMockSession } from '../lib/mockSession'
+import { ROLE, normalizeRole } from '../lib/roles'
 
 const STATUS = {
   Draft:     { label: 'Bản nháp', cls: 'bg-gray-100 text-gray-600' },
@@ -26,12 +24,6 @@ const STATUS_FILTER = [
   { value: 'Cancelled', label: 'Đã huỷ' },
 ]
 
-const MOCK_INGREDIENTS = MOCK_TONKHO.map((item) => ({
-  MaNL: item.MaNL,
-  TenNL: item.TenNL,
-  DonViTinh: item.DonViTinh,
-}))
-
 function fmtDate(value) {
   if (!value) return '—'
   return new Date(value).toLocaleDateString('vi-VN', {
@@ -45,11 +37,6 @@ function fmtDateTime(value) {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })
-}
-
-function genMaPN() {
-  const d = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-  return `PN${d}${String(Math.floor(Math.random() * 900) + 100)}`
 }
 
 function normalizeNCC(item) {
@@ -93,10 +80,6 @@ function normalizePhieu(item) {
     TongTien: Number(item.TongTien ?? item.tongtien ?? 0),
     chiTiet: (item.chiTiet || item.chitiet || []).map(normalizeChiTiet),
   }
-}
-
-function buildFallbackPhieuList() {
-  return MOCK_PHIEU_NHAP.map(normalizePhieu)
 }
 
 function PhieuRow({ phieu, canApprove, canCancel, busy, onApprove, onCancel }) {
@@ -222,9 +205,9 @@ function PhieuRow({ phieu, canApprove, canCancel, busy, onApprove, onCancel }) {
 export default function PhieuNhap() {
   const user = useAuthStore((state) => state.user)
   const role = normalizeRole(user?.vaiTro)
-  const canCreate = ['role_admin', 'role_readonly', 'role_warehouse_staff'].includes(role)
-  const canApprove = ['role_admin', 'role_readonly'].includes(role)
-  const canCancel = ['role_admin', 'role_readonly', 'role_warehouse_staff'].includes(role)
+  const canCreate = [ROLE.ADMIN, ROLE.BRANCH_MANAGER, ROLE.WAREHOUSE].includes(role)
+  const canApprove = [ROLE.ADMIN, ROLE.OPS_DIRECTOR, ROLE.BRANCH_MANAGER].includes(role)
+  const canCancel = [ROLE.ADMIN, ROLE.BRANCH_MANAGER, ROLE.WAREHOUSE].includes(role)
 
   const [phieuList, setPhieuList] = useState([])
   const [suppliers, setSuppliers] = useState([])
@@ -235,7 +218,6 @@ export default function PhieuNhap() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [actionKey, setActionKey] = useState('')
-  const [usingFallback, setUsingFallback] = useState(false)
 
   const [maNCC, setMaNCC] = useState('')
   const [ngay, setNgay] = useState('')
@@ -256,15 +238,6 @@ export default function PhieuNhap() {
 
   const loadData = useCallback(async (showToast = false) => {
     setLoading(true)
-    if (isMockSession()) {
-      setPhieuList(buildFallbackPhieuList())
-      setSuppliers(MOCK_NHA_CUNG_CAP.map(normalizeNCC))
-      setIngredients(MOCK_INGREDIENTS.map(normalizeIngredient))
-      setUsingFallback(true)
-      setLoading(false)
-      if (showToast) toast.success('Đã làm mới dữ liệu demo phiếu nhập')
-      return
-    }
     try {
       const [listRes, supplierRes, ingredientRes] = await Promise.all([
         api.get('/phieu-nhap'),
@@ -287,15 +260,10 @@ export default function PhieuNhap() {
       setPhieuList(detailResults)
       setSuppliers((supplierRes.data || []).map(normalizeNCC))
       setIngredients((ingredientRes.data || []).map(normalizeIngredient))
-      setUsingFallback(false)
 
       if (showToast) toast.success('Đã làm mới danh sách phiếu nhập')
     } catch (err) {
-      setPhieuList(buildFallbackPhieuList())
-      setSuppliers(MOCK_NHA_CUNG_CAP.map(normalizeNCC))
-      setIngredients(MOCK_INGREDIENTS.map(normalizeIngredient))
-      setUsingFallback(true)
-      toast.error(err.message || 'Không tải được phiếu nhập, đang hiển thị dữ liệu demo')
+      toast.error(err.message || 'Không tải được phiếu nhập')
     } finally {
       setLoading(false)
     }
@@ -377,32 +345,14 @@ export default function PhieuNhap() {
 
     setSaving(true)
     try {
-      if (usingFallback) {
-        const supplier = suppliers.find((item) => item.MaNCC === maNCC)
-        const newItem = {
-          MaPN: genMaPN(),
-          MaNCC: maNCC,
-          TenNCC: supplier?.TenNCC || '',
-          NgayNhap: ngay,
-          GhiChu: ghiChu,
-          TrangThai: 'Draft',
-          NgayTao: new Date().toISOString(),
-          NguoiTao: user?.hoTen || '—',
-          TongTien: tongTien,
-          chiTiet: rows,
-        }
-        setPhieuList((prev) => [newItem, ...prev])
-        toast.success(`Đã tạo phiếu nhập ${newItem.MaPN} (demo)`)
-      } else {
-        const res = await api.post('/phieu-nhap', {
-          MaNCC: maNCC,
-          NgayNhap: ngay,
-          GhiChu: ghiChu,
-          items: rows.map((row) => ({ MaNL: row.MaNL, SoLuong: row.SoLuong, DonGia: row.DonGia })),
-        })
-        await loadData()
-        toast.success(res.message || 'Đã tạo phiếu nhập thành công')
-      }
+      const res = await api.post('/phieu-nhap', {
+        MaNCC: maNCC,
+        NgayNhap: ngay,
+        GhiChu: ghiChu,
+        items: rows.map((row) => ({ MaNL: row.MaNL, SoLuong: row.SoLuong, DonGia: row.DonGia })),
+      })
+      await loadData()
+      toast.success(res.message || 'Đã tạo phiếu nhập thành công')
 
       resetForm()
       setShowForm(false)
@@ -418,16 +368,9 @@ export default function PhieuNhap() {
 
     setActionKey(`approve-${maPN}`)
     try {
-      if (usingFallback) {
-        setPhieuList((prev) => prev.map((item) => (
-          item.MaPN === maPN ? { ...item, TrangThai: 'Approved' } : item
-        )))
-        toast.success('Đã duyệt phiếu (demo)')
-      } else {
-        const res = await api.patch(`/phieu-nhap/${maPN}/duyet`)
-        await loadData()
-        toast.success(res.message || 'Đã duyệt phiếu nhập')
-      }
+      const res = await api.patch(`/phieu-nhap/${maPN}/duyet`)
+      await loadData()
+      toast.success(res.message || 'Đã duyệt phiếu nhập')
     } catch (err) {
       toast.error(err.message || 'Không duyệt được phiếu nhập')
     } finally {
@@ -440,16 +383,9 @@ export default function PhieuNhap() {
 
     setActionKey(`cancel-${maPN}`)
     try {
-      if (usingFallback) {
-        setPhieuList((prev) => prev.map((item) => (
-          item.MaPN === maPN ? { ...item, TrangThai: 'Cancelled' } : item
-        )))
-        toast.success('Đã huỷ phiếu (demo)')
-      } else {
-        const res = await api.patch(`/phieu-nhap/${maPN}/huy`)
-        await loadData()
-        toast.success(res.message || 'Đã huỷ phiếu nhập')
-      }
+      const res = await api.patch(`/phieu-nhap/${maPN}/huy`)
+      await loadData()
+      toast.success(res.message || 'Đã huỷ phiếu nhập')
     } catch (err) {
       toast.error(err.message || 'Không huỷ được phiếu nhập')
     } finally {
@@ -482,12 +418,6 @@ export default function PhieuNhap() {
         {draftCount > 0 && (
           <span className="text-xs bg-yellow-100 text-yellow-700 px-2.5 py-1 rounded-lg font-semibold">
             {draftCount} phiếu chờ duyệt
-          </span>
-        )}
-
-        {usingFallback && (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-semibold">
-            <Database size={13} /> Dữ liệu demo
           </span>
         )}
 

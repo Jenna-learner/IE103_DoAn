@@ -5,9 +5,9 @@
  */
 import { Navigate } from 'react-router-dom'
 import useAuthStore from '../store/authStore'
-import { normalizeRole } from '../lib/roles'
+import { ALL_ROLES, normalizeRole } from '../lib/roles'
 
-const VALID_ROLES = ['role_admin', 'role_cashier', 'role_warehouse_staff', 'role_readonly']
+const VALID_ROLES = ALL_ROLES
 
 export default function ProtectedRoute({ children, roles }) {
   const token  = useAuthStore((s) => s.token)

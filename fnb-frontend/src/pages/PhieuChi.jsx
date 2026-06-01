@@ -1,22 +1,21 @@
 /**
  * UI 09 — Phiếu Chi vận hành (/phieu-chi)
- * Roles: ALL (xem) | role_admin + role_readonly (duyệt / từ chối) | tất cả (tạo)
+ * Roles: ALL (xem) | admin + giám đốc vận hành + quản lý chi nhánh (duyệt / từ chối)
  *
  * Tính năng:
  *  - Danh sách phiếu chi dạng bảng (kèm bộ lọc trạng thái + loại chi + tìm kiếm)
  *  - Tạo phiếu chi mới (inline form trong modal)
- *  - Duyệt / Từ chối phiếu (canApprove = role_admin + role_readonly)
+ *  - Duyệt / Từ chối phiếu theo role quản lý
  *  - Hủy phiếu do chính mình tạo (chỉ khi pending)
  *  - KPI: tổng chi tháng này, số phiếu chờ duyệt, tổng phiếu
  */
-import { useState, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Receipt, Plus, X, Check, ChevronDown, Search } from 'lucide-react'
 import clsx from 'clsx'
-import { MOCK_PHIEU_CHI } from '../lib/mock'
+import api from '../lib/api'
 import useAuthStore from '../store/authStore'
 import toast from 'react-hot-toast'
-
-const USE_MOCK = true
+import { ROLE, normalizeRole } from '../lib/roles'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const LOAI_CHI = ['Vận hành', 'Nguyên liệu', 'Lương', 'Bảo trì', 'Marketing', 'Khác']
@@ -32,11 +31,21 @@ function fmt(n) {
   return n?.toLocaleString('vi-VN') + ' ₫'
 }
 
-function genMaPC() {
-  const now = new Date()
-  const yyyymmdd = now.toISOString().slice(0,10).replace(/-/g,'')
-  const rand = Math.floor(Math.random() * 900 + 100)
-  return `PChi${yyyymmdd}${rand}`
+function normalizeExpense(item = {}) {
+  return {
+    MaPC: item.MaPC || item.mapc,
+    MaCN: item.MaCN || item.macn,
+    TenCN: item.TenCN || item.tencn || '—',
+    LoaiChi: item.LoaiChi || item.loaichi || 'Khác',
+    SoTien: Number(item.SoTien ?? item.sotien ?? 0),
+    MoTa: item.MoTa || item.mota || '',
+    NgayChi: item.NgayChi || item.ngaychi || '',
+    TrangThai: item.TrangThai || item.trangthai || 'Pending',
+    NguoiLap: item.TenNhanVienLap || item.NguoiLap || item.nguoilap || '—',
+    NguoiDuyet: item.NguoiDuyet || item.nguoiduyet || null,
+    NgayDuyet: item.NgayDuyet || item.ngayduyet || null,
+    LyDoTuChoi: item.LyDoTuChoi || item.lydotuchoi || null,
+  }
 }
 
 // ─── Row component (accordion) ────────────────────────────────────────────────
@@ -174,9 +183,13 @@ function PhieuRow({ pc, canApprove, currentUser, onApprove, onReject, onCancel }
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function PhieuChi() {
   const user = useAuthStore((s) => s.user)
-  const canApprove = ['role_admin'].includes(user?.vaiTro)
+  const role = normalizeRole(user?.vaiTro)
+  const canApprove = [ROLE.ADMIN, ROLE.OPS_DIRECTOR, ROLE.BRANCH_MANAGER].includes(role)
+  const canCreate = role !== ROLE.OPS_DIRECTOR && Boolean(user?.maCN)
 
-  const [records, setRecords] = useState(USE_MOCK ? MOCK_PHIEU_CHI : [])
+  const [records, setRecords] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [filterStatus, setFilterStatus]   = useState('all')
   const [filterLoai, setFilterLoai]       = useState('all')
   const [search, setSearch]               = useState('')
@@ -187,6 +200,23 @@ export default function PhieuChi() {
     SoTien: '',
     NgayChi: new Date().toISOString().slice(0, 10),
   })
+
+  const loadData = useCallback(async (showToast = false) => {
+    setLoading(true)
+    try {
+      const res = await api.get('/phieu-chi')
+      setRecords((res.data?.items || []).map(normalizeExpense))
+      if (showToast) toast.success('Đã làm mới danh sách phiếu chi')
+    } catch (err) {
+      toast.error(err.message || 'Không tải được phiếu chi')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   // ─── KPI ───────────────────────────────────────────────────────────────────
   const now = new Date()
@@ -211,54 +241,56 @@ export default function PhieuChi() {
   }, [records, filterStatus, filterLoai, search])
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
-  function handleCreate() {
+  async function handleCreate() {
     if (!form.MoTa.trim() || !form.SoTien) return
-    const newRec = {
-      MaPC:       genMaPC(),
-      LoaiChi:    form.LoaiChi,
-      MoTa:       form.MoTa.trim(),
-      SoTien:     Number(form.SoTien),
-      NgayChi:    form.NgayChi,
-      TrangThai:  'Pending',
-      NguoiLap:   user?.hoTen || 'Người dùng',
-      MaCN:       user?.maCN  || 'CN001',
-      TenCN:      user?.tenCN || 'Chi nhánh',
-      NguoiDuyet: null,
-      NgayDuyet:  null,
-      LyDoTuChoi: null,
+    setSubmitting(true)
+    try {
+      const res = await api.post('/phieu-chi', {
+        MaCN: user?.maCN,
+        NgayChi: form.NgayChi,
+        LoaiChi: form.LoaiChi,
+        SoTien: Number(form.SoTien),
+        MoTa: form.MoTa.trim(),
+      })
+      toast.success(res.message || 'Đã tạo phiếu chi!')
+      setShowModal(false)
+      setForm({ LoaiChi: 'Vận hành', MoTa: '', SoTien: '', NgayChi: new Date().toISOString().slice(0,10) })
+      await loadData()
+    } catch (err) {
+      toast.error(err.message || 'Không tạo được phiếu chi')
+    } finally {
+      setSubmitting(false)
     }
-    setRecords(prev => [newRec, ...prev])
-    toast.success('Đã tạo phiếu chi!')
-    setShowModal(false)
-    setForm({ LoaiChi: 'Vận hành', MoTa: '', SoTien: '', NgayChi: new Date().toISOString().slice(0,10) })
   }
 
-  function handleApprove(MaPC) {
-    setRecords(prev => prev.map(r =>
-      r.MaPC === MaPC
-        ? { ...r, TrangThai: 'Approved', NguoiDuyet: user?.hoTen, NgayDuyet: new Date().toISOString().slice(0,10) }
-        : r
-    ))
-    toast.success('Đã duyệt phiếu chi!')
+  async function handleApprove(MaPC) {
+    try {
+      const res = await api.patch(`/phieu-chi/${MaPC}/duyet`)
+      toast.success(res.message || 'Đã duyệt phiếu chi!')
+      await loadData()
+    } catch (err) {
+      toast.error(err.message || 'Không duyệt được phiếu chi')
+    }
   }
 
-  function handleReject(MaPC, lyDo) {
-    setRecords(prev => prev.map(r =>
-      r.MaPC === MaPC
-        ? { ...r, TrangThai: 'Rejected', NguoiDuyet: user?.hoTen, NgayDuyet: new Date().toISOString().slice(0,10), LyDoTuChoi: lyDo }
-        : r
-    ))
-    toast.success('Đã từ chối phiếu chi.')
+  async function handleReject(MaPC, lyDo) {
+    try {
+      const res = await api.patch(`/phieu-chi/${MaPC}/tu-choi`, { LyDoTuChoi: lyDo })
+      toast.success(res.message || 'Đã từ chối phiếu chi.')
+      await loadData()
+    } catch (err) {
+      toast.error(err.message || 'Không từ chối được phiếu chi')
+    }
   }
 
-  function handleCancel(MaPC) {
-    // DB không có 'Cancelled' — người lập tự hủy → ghi nhận là 'Rejected' với lý do tự hủy
-    setRecords(prev => prev.map(r =>
-      r.MaPC === MaPC
-        ? { ...r, TrangThai: 'Rejected', NguoiDuyet: r.NguoiLap, NgayDuyet: new Date().toISOString().slice(0,10), LyDoTuChoi: 'Người lập phiếu tự hủy' }
-        : r
-    ))
-    toast('Đã hủy phiếu chi.', { icon: '🗑️' })
+  async function handleCancel(MaPC) {
+    try {
+      const res = await api.patch(`/phieu-chi/${MaPC}/tu-choi`, { LyDoTuChoi: 'Người lập phiếu tự hủy' })
+      toast.success(res.message || 'Đã hủy phiếu chi.')
+      await loadData()
+    } catch (err) {
+      toast.error(err.message || 'Không hủy được phiếu chi')
+    }
   }
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -273,13 +305,15 @@ export default function PhieuChi() {
           </h1>
           <p className="text-gray-500 text-sm mt-0.5">Quản lý các khoản chi phí hoạt động chi nhánh</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-medium transition-colors"
-        >
-          <Plus size={16} />
-          Tạo phiếu chi
-        </button>
+        {canCreate && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <Plus size={16} />
+            Tạo phiếu chi
+          </button>
+        )}
       </div>
 
       {/* KPI strip */}
@@ -335,13 +369,18 @@ export default function PhieuChi() {
 
       {/* List */}
       <div className="space-y-2">
-        {filtered.length === 0 && (
+        {loading && (
+          <div className="text-center py-16 text-gray-600">
+            <p>Đang tải phiếu chi...</p>
+          </div>
+        )}
+        {!loading && filtered.length === 0 && (
           <div className="text-center py-16 text-gray-600">
             <Receipt size={32} className="mx-auto mb-3 opacity-30" />
             <p>Không tìm thấy phiếu chi nào</p>
           </div>
         )}
-        {filtered.map(pc => (
+        {!loading && filtered.map(pc => (
           <PhieuRow
             key={pc.MaPC}
             pc={pc}
@@ -450,10 +489,10 @@ export default function PhieuChi() {
               </button>
               <button
                 onClick={handleCreate}
-                disabled={!form.MoTa.trim() || !form.SoTien}
+                disabled={!form.MoTa.trim() || !form.SoTien || submitting}
                 className="flex-1 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-semibold transition-colors"
               >
-                Tạo phiếu
+                {submitting ? 'Đang tạo...' : 'Tạo phiếu'}
               </button>
             </div>
           </div>

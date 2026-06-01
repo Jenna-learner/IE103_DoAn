@@ -7,7 +7,7 @@ router.use(authenticate);
 
 router.get('/',                 ctrl.getAll);
 router.post('/',                ctrl.create);
-router.patch('/:maPC/duyet',    authorize('admin'), ctrl.duyet);
-router.patch('/:maPC/tu-choi',  authorize('admin'), ctrl.tuChoi);
+router.patch('/:maPC/duyet',    authorize('admin', 'giam_doc_van_hanh', 'quan_ly_chinhanh'), ctrl.duyet);
+router.patch('/:maPC/tu-choi',  authorize('admin', 'giam_doc_van_hanh', 'quan_ly_chinhanh'), ctrl.tuChoi);
 
 module.exports = router;

@@ -4,6 +4,7 @@
  *
  * Vai trò hệ thống (VaiTro trong TAIKHOAN):
  *   admin              → Quản trị viên toàn hệ thống
+ *   giam_doc_van_hanh  → Điều hành toàn chuỗi, xem dashboard / duyệt vận hành
  *   quan_ly_chinhanh   → Quản lý chi nhánh
  *   thu_ngan           → Thu ngân (POS)
  *   kho                → Nhân viên kho vận
@@ -30,7 +31,7 @@ const authenticate = (req, res, next) => {
 
 /**
  * Role-based authorization
- * Dùng: authorize('admin', 'quan_ly_chinhanh')
+ * Dùng: authorize('admin', 'giam_doc_van_hanh', 'quan_ly_chinhanh')
  */
 const authorize = (...roles) => {
   return (req, res, next) => {

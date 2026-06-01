@@ -1,18 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
-  Package, AlertTriangle, DollarSign, Search,
-  RefreshCw, ArrowDownCircle, ArrowUpCircle, ClipboardList, Database,
+  Package, AlertTriangle, Search,
+  RefreshCw, ArrowDownCircle, ArrowUpCircle, ClipboardList,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 import api from '../lib/api'
-import { MOCK_TONKHO, MOCK_NHATKYKHO } from '../lib/mock'
-import { fmtCurrency, fmtNumber } from '../lib/format'
-import { isMockSession } from '../lib/mockSession'
-
-const GIA_NHAP_MAP = Object.fromEntries(MOCK_TONKHO.map((item) => [item.MaNL, item.GiaNhap]))
+import { fmtNumber } from '../lib/format'
 
 const LOAI_CONFIG = {
   Import:     { label: 'Nhập kho',    cls: 'bg-green-100 text-green-700', icon: <ArrowDownCircle size={12} /> },
@@ -44,7 +40,6 @@ function normalizeTonKhoItem(item) {
     DonViTinh: item.DonViTinh || item.donvitinh,
     SoLuongTon: Number(item.SoLuongTon ?? item.soluongton ?? 0),
     TonToiThieu: Number(item.TonToiThieu ?? item.tontoithieu ?? 0),
-    GiaNhap: Number(item.GiaNhap ?? item.gianhap ?? GIA_NHAP_MAP[item.MaNL || item.manl] ?? 0),
   }
 }
 
@@ -85,7 +80,6 @@ export default function TonKho() {
   const [tonKho, setTonKho] = useState([])
   const [nhatKy, setNhatKy] = useState([])
   const [loading, setLoading] = useState(false)
-  const [usingFallback, setUsingFallback] = useState(false)
 
   const [search, setSearch] = useState('')
   const [filterLoai, setFilterLoai] = useState('')
@@ -93,14 +87,6 @@ export default function TonKho() {
 
   const loadData = useCallback(async (showToast = false) => {
     setLoading(true)
-    if (isMockSession()) {
-      setTonKho(MOCK_TONKHO.map(normalizeTonKhoItem))
-      setNhatKy(MOCK_NHATKYKHO.map(normalizeNhatKyItem))
-      setUsingFallback(true)
-      setLoading(false)
-      if (showToast) toast.success('Đã làm mới dữ liệu demo kho')
-      return
-    }
     try {
       const [tkRes, nkRes] = await Promise.all([
         api.get('/kho/ton-kho'),
@@ -112,14 +98,10 @@ export default function TonKho() {
 
       setTonKho(tonKhoData)
       setNhatKy(nhatKyData)
-      setUsingFallback(false)
 
       if (showToast) toast.success('Đã làm mới dữ liệu kho')
     } catch (err) {
-      setTonKho(MOCK_TONKHO.map(normalizeTonKhoItem))
-      setNhatKy(MOCK_NHATKYKHO.map(normalizeNhatKyItem))
-      setUsingFallback(true)
-      toast.error(err.message || 'Không tải được dữ liệu kho, đang hiển thị dữ liệu demo')
+      toast.error(err.message || 'Không tải được dữ liệu kho')
     } finally {
       setLoading(false)
     }
@@ -156,7 +138,7 @@ export default function TonKho() {
   }, [nhatKy, filterLoai, search])
 
   const soNLCanhBao = tonKho.filter((item) => item.SoLuongTon <= item.TonToiThieu).length
-  const giaTriTonKho = tonKho.reduce((sum, item) => sum + item.SoLuongTon * item.GiaNhap, 0)
+  const tongSoLuongTon = tonKho.reduce((sum, item) => sum + item.SoLuongTon, 0)
 
   const switchTab = (idx) => {
     setSearch('')
@@ -182,9 +164,9 @@ export default function TonKho() {
           warn={soNLCanhBao > 0}
         />
         <KpiCard
-          icon={<DollarSign size={18} className="text-green-600" />}
-          label="Giá trị tồn kho"
-          value={fmtCurrency(giaTriTonKho)}
+          icon={<Package size={18} className="text-green-600" />}
+          label="Tổng lượng tồn"
+          value={fmtNumber(tongSoLuongTon)}
           color="bg-green-50"
         />
       </div>
@@ -215,11 +197,6 @@ export default function TonKho() {
           ))}
         </div>
 
-        {usingFallback && (
-          <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-semibold">
-            <Database size={13} /> Đang hiển thị dữ liệu demo
-          </div>
-        )}
       </div>
 
       <div className="card shrink-0 flex flex-wrap items-center gap-3">
@@ -278,7 +255,7 @@ export default function TonKho() {
             <div className="col-span-1 text-center">ĐV</div>
             <div className="col-span-2 text-right">Tồn hiện tại</div>
             <div className="col-span-2 text-right">Mức tối thiểu</div>
-            <div className="col-span-2 text-right">Giá nhập</div>
+            <div className="col-span-2 text-right">Biên an toàn</div>
           </div>
 
           <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
@@ -328,8 +305,13 @@ export default function TonKho() {
                     {fmtNumber(item.TonToiThieu)} {item.DonViTinh}
                   </div>
 
-                  <div className="col-span-2 text-right text-xs text-gray-600">
-                    {item.GiaNhap > 0 ? `${fmtCurrency(item.GiaNhap)}/${item.DonViTinh}` : '—'}
+                  <div className="col-span-2 text-right text-xs font-semibold">
+                    <span className={clsx(
+                      item.SoLuongTon - item.TonToiThieu < 0 ? 'text-red-600' : 'text-green-600'
+                    )}>
+                      {item.SoLuongTon - item.TonToiThieu > 0 ? '+' : ''}
+                      {fmtNumber(item.SoLuongTon - item.TonToiThieu)} {item.DonViTinh}
+                    </span>
                   </div>
                 </div>
               )

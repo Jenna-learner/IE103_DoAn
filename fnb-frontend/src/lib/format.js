@@ -16,7 +16,7 @@ export const membershipStyle = (hang) => {
     Bronze:  { cls: 'bg-orange-100 text-orange-700', icon: '🥉' },
     Silver:  { cls: 'bg-gray-100 text-gray-700',     icon: '🥈' },
     Gold:    { cls: 'bg-yellow-100 text-yellow-700',  icon: '🥇' },
-    Diamond: { cls: 'bg-blue-100 text-blue-700',      icon: '💎' },
+    Platinum: { cls: 'bg-blue-100 text-blue-700',     icon: '💎' },
   }
   return map[hang] || map['Bronze']
 }

@@ -17,6 +17,6 @@ router.get('/nguyen-lieu',      ctrl.getNguyenLieu);
 router.post('/nguyen-lieu',     authorize('admin'), ctrl.createNguyenLieu);
 
 // Kiểm kho (điều chỉnh Audit_Loss / Audit_Gain)
-router.post('/kiem-kho',        authorize('admin','quan_ly_chinhanh'), ctrl.kiemKho);
+router.post('/kiem-kho',        authorize('admin','quan_ly_chinhanh','kho'), ctrl.kiemKho);
 
 module.exports = router;

@@ -289,5 +289,5 @@ INSERT INTO expense_categories (name) VALUES
   ('Điện'), ('Nước'), ('Lương thời vụ'), ('Vệ sinh'), ('Marketing'), ('Khác')
 ON CONFLICT DO NOTHING;
 
--- Admin user mặc định (password: Admin@123 → bcrypt)
+-- Admin user mặc định hiện được tạo qua sql/add_taikhoan.sql
 -- Tạo thực tế bằng API /auth/register hoặc script riêng

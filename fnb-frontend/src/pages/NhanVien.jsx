@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { UserCog, Plus, RefreshCw, Search, Database, Phone, Mail, KeyRound } from 'lucide-react'
+import { UserCog, Plus, RefreshCw, Search, Phone, Mail, KeyRound } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 import api from '../lib/api'
-import { MOCK_NHAN_VIEN, MOCK_BRANCHES, MOCK_DEPARTMENTS } from '../lib/mock'
 import { fmtCurrency } from '../lib/format'
-import { isMockSession } from '../lib/mockSession'
+import useAuthStore from '../store/authStore'
+import { ROLE, ROLE_LABEL, normalizeRole } from '../lib/roles'
 
 const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin' },
+  { value: 'giam_doc_van_hanh', label: 'Giám đốc vận hành' },
   { value: 'quan_ly_chinhanh', label: 'Quản lý chi nhánh' },
   { value: 'thu_ngan', label: 'Thu ngân' },
   { value: 'kho', label: 'Kho vận' },
@@ -64,6 +65,11 @@ function normalizeDepartment(item) {
 }
 
 export default function NhanVien() {
+  const user = useAuthStore((s) => s.user)
+  const role = normalizeRole(user?.vaiTro)
+  const canCreateUser = role === ROLE.ADMIN
+  const canEditEmployee = [ROLE.ADMIN, ROLE.BRANCH_MANAGER].includes(role)
+  const canResetPassword = role === ROLE.ADMIN
   const [employees, setEmployees] = useState([])
   const [branches, setBranches] = useState([])
   const [departments, setDepartments] = useState([])
@@ -72,7 +78,6 @@ export default function NhanVien() {
   const [filterDepartment, setFilterDepartment] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [usingFallback, setUsingFallback] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
@@ -81,22 +86,6 @@ export default function NhanVien() {
 
   const loadData = useCallback(async (showToast = false) => {
     setLoading(true)
-    if (isMockSession()) {
-      setEmployees(MOCK_NHAN_VIEN.map((item) => normalizeEmployee({
-        ...item,
-        ChucVu: item.VaiTro,
-        LuongCoBan: item.VaiTro === 'role_admin' ? 18000000 : 9000000,
-        TrangThai: 'Active',
-        TenDangNhap: item.HoTen.toLowerCase().replace(/\s+/g, '.'),
-        VaiTro: item.VaiTro === 'role_admin' ? 'admin' : item.VaiTro === 'role_cashier' ? 'thu_ngan' : 'kho',
-      })))
-      setBranches(MOCK_BRANCHES.map(normalizeBranch))
-      setDepartments(MOCK_DEPARTMENTS.map(normalizeDepartment))
-      setUsingFallback(true)
-      setLoading(false)
-      if (showToast) toast.success('Đã làm mới dữ liệu demo nhân viên')
-      return
-    }
     try {
       const [employeeRes, branchRes, departmentRes] = await Promise.all([
         api.get('/nhan-vien'),
@@ -106,21 +95,9 @@ export default function NhanVien() {
       setEmployees((employeeRes.data || []).map(normalizeEmployee))
       setBranches((branchRes.data || []).map(normalizeBranch))
       setDepartments((departmentRes.data || []).map(normalizeDepartment))
-      setUsingFallback(false)
       if (showToast) toast.success('Đã làm mới dữ liệu nhân viên')
     } catch (err) {
-      setEmployees(MOCK_NHAN_VIEN.map((item) => normalizeEmployee({
-        ...item,
-        ChucVu: item.VaiTro,
-        LuongCoBan: item.VaiTro === 'role_admin' ? 18000000 : 9000000,
-        TrangThai: 'Active',
-        TenDangNhap: item.HoTen.toLowerCase().replace(/\s+/g, '.'),
-        VaiTro: item.VaiTro === 'role_admin' ? 'admin' : item.VaiTro === 'role_cashier' ? 'thu_ngan' : 'kho',
-      })))
-      setBranches(MOCK_BRANCHES.map(normalizeBranch))
-      setDepartments(MOCK_DEPARTMENTS.map(normalizeDepartment))
-      setUsingFallback(true)
-      toast.error(err.message || 'Không tải được nhân viên, đang hiển thị dữ liệu demo')
+      toast.error(err.message || 'Không tải được nhân viên')
     } finally {
       setLoading(false)
     }
@@ -171,25 +148,14 @@ export default function NhanVien() {
   }
 
   const handleSubmit = async () => {
+    if (!editingId && !canCreateUser) {
+      toast.error('Chỉ admin mới được tạo tài khoản người dùng')
+      return
+    }
     if (!validate()) return
     setSaving(true)
     try {
-      if (usingFallback) {
-        const branch = branches.find((item) => item.MaCN === form.MaCN)
-        const department = departments.find((item) => item.MaBP === form.MaBP)
-        const payload = normalizeEmployee({
-          ...form,
-          TenCN: branch?.TenCN,
-          TenBP: department?.TenBP,
-        })
-        if (editingId) {
-          setEmployees((prev) => prev.map((item) => item.MaNV === editingId ? { ...item, ...payload } : item))
-          toast.success('Đã cập nhật nhân viên (demo)')
-        } else {
-          setEmployees((prev) => [payload, ...prev])
-          toast.success('Đã thêm nhân viên (demo)')
-        }
-      } else if (editingId) {
+      if (editingId) {
         const res = await api.put(`/nhan-vien/${editingId}`, {
           HoTen: form.HoTen,
           MaBP: form.MaBP,
@@ -236,12 +202,8 @@ export default function NhanVien() {
     }
     setResettingId(maNV)
     try {
-      if (usingFallback) {
-        toast.success(`Đã đặt lại mật khẩu cho ${maNV} (demo)`)
-      } else {
-        const res = await api.patch(`/nhan-vien/${maNV}/dat-lai-mat-khau`, { MatKhauMoi: resetPassword })
-        toast.success(res.message || 'Đã đặt lại mật khẩu')
-      }
+      const res = await api.patch(`/nhan-vien/${maNV}/dat-lai-mat-khau`, { MatKhauMoi: resetPassword })
+      toast.success(res.message || 'Đã đặt lại mật khẩu')
       setResetPassword('')
     } catch (err) {
       toast.error(err.message || 'Không đặt lại được mật khẩu')
@@ -274,28 +236,32 @@ export default function NhanVien() {
           <option value="">Tất cả bộ phận</option>
           {departments.map((item) => <option key={item.MaBP} value={item.MaBP}>{item.TenBP}</option>)}
         </select>
-        {usingFallback && <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-semibold"><Database size={13} /> Dữ liệu demo</span>}
         <button onClick={() => loadData(true)} className="btn-secondary text-sm px-3 py-2" disabled={loading}><RefreshCw size={14} className={clsx(loading && 'animate-spin')} /> Làm mới</button>
-        <button onClick={openCreate} className="btn-primary text-sm px-3 py-2"><Plus size={14} /> Thêm nhân viên</button>
+        {canCreateUser && (
+          <button onClick={openCreate} className="btn-primary text-sm px-3 py-2"><Plus size={14} /> Thêm người dùng</button>
+        )}
       </div>
 
       {showForm && (
         <div className="card shrink-0 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-bold text-gray-800">{editingId ? 'Cập nhật nhân viên' : 'Thêm nhân viên mới'}</h2>
+            <div>
+              <h2 className="font-bold text-gray-800">{editingId ? 'Cập nhật nhân viên' : 'Thêm nhân viên & tài khoản'}</h2>
+              {!editingId && <p className="text-xs text-gray-400 mt-1">Admin có thể tạo tài khoản demo theo đúng role để kiểm thử phân quyền.</p>}
+            </div>
             <button onClick={() => { setShowForm(false); setEditingId(''); setForm(EMPTY_FORM) }} className="text-xs text-gray-400 hover:text-gray-600">✕ Đóng</button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
             <div><label className="block text-xs font-semibold text-gray-600 mb-1">Mã NV</label><input value={form.MaNV} onChange={(e) => setForm((p) => ({ ...p, MaNV: e.target.value }))} className="input text-sm" disabled={!!editingId} /></div>
             <div><label className="block text-xs font-semibold text-gray-600 mb-1">Họ tên</label><input value={form.HoTen} onChange={(e) => setForm((p) => ({ ...p, HoTen: e.target.value }))} className="input text-sm" /></div>
             <div><label className="block text-xs font-semibold text-gray-600 mb-1">Bộ phận</label><select value={form.MaBP} onChange={(e) => setForm((p) => ({ ...p, MaBP: e.target.value }))} className="input text-sm"><option value="">-- Chọn bộ phận --</option>{departments.map((item) => <option key={item.MaBP} value={item.MaBP}>{item.TenBP}</option>)}</select></div>
-            <div><label className="block text-xs font-semibold text-gray-600 mb-1">Chi nhánh</label><select value={form.MaCN} onChange={(e) => setForm((p) => ({ ...p, MaCN: e.target.value }))} className="input text-sm"><option value="">-- Chọn chi nhánh --</option>{branches.map((item) => <option key={item.MaCN} value={item.MaCN}>{item.TenCN}</option>)}</select></div>
+            <div><label className="block text-xs font-semibold text-gray-600 mb-1">Chi nhánh</label><select value={form.MaCN} onChange={(e) => setForm((p) => ({ ...p, MaCN: e.target.value }))} className="input text-sm" disabled={!!editingId || !canCreateUser}><option value="">-- Chọn chi nhánh --</option>{branches.map((item) => <option key={item.MaCN} value={item.MaCN}>{item.TenCN}</option>)}</select></div>
             <div><label className="block text-xs font-semibold text-gray-600 mb-1">SĐT</label><input value={form.SDT} onChange={(e) => setForm((p) => ({ ...p, SDT: e.target.value }))} className="input text-sm" /></div>
             <div><label className="block text-xs font-semibold text-gray-600 mb-1">Email</label><input value={form.Email} onChange={(e) => setForm((p) => ({ ...p, Email: e.target.value }))} className="input text-sm" /></div>
             <div><label className="block text-xs font-semibold text-gray-600 mb-1">Chức vụ</label><input value={form.ChucVu} onChange={(e) => setForm((p) => ({ ...p, ChucVu: e.target.value }))} className="input text-sm" /></div>
             <div><label className="block text-xs font-semibold text-gray-600 mb-1">Lương cơ bản</label><input type="number" value={form.LuongCoBan} onChange={(e) => setForm((p) => ({ ...p, LuongCoBan: e.target.value }))} className="input text-sm" /></div>
             <div><label className="block text-xs font-semibold text-gray-600 mb-1">Trạng thái</label><select value={form.TrangThai} onChange={(e) => setForm((p) => ({ ...p, TrangThai: e.target.value }))} className="input text-sm"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></div>
-            {!editingId && (
+            {!editingId && canCreateUser && (
               <>
                 <div><label className="block text-xs font-semibold text-gray-600 mb-1">Tên đăng nhập</label><input value={form.TenDangNhap} onChange={(e) => setForm((p) => ({ ...p, TenDangNhap: e.target.value }))} className="input text-sm" /></div>
                 <div><label className="block text-xs font-semibold text-gray-600 mb-1">Mật khẩu</label><input type="password" value={form.MatKhau} onChange={(e) => setForm((p) => ({ ...p, MatKhau: e.target.value }))} className="input text-sm" /></div>
@@ -305,7 +271,7 @@ export default function NhanVien() {
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
             <button onClick={() => { setShowForm(false); setEditingId(''); setForm(EMPTY_FORM) }} className="btn-secondary text-sm px-4 py-2">Huỷ</button>
-            <button onClick={handleSubmit} className="btn-primary text-sm px-4 py-2" disabled={saving}>{saving ? <><RefreshCw size={14} className="animate-spin" /> Đang lưu...</> : 'Lưu nhân viên'}</button>
+            <button onClick={handleSubmit} className="btn-primary text-sm px-4 py-2" disabled={saving}>{saving ? <><RefreshCw size={14} className="animate-spin" /> Đang lưu...</> : editingId ? 'Lưu thay đổi' : 'Tạo người dùng'}</button>
           </div>
         </div>
       )}
@@ -330,7 +296,7 @@ export default function NhanVien() {
                 <div className="col-span-2 font-mono text-xs font-semibold text-gray-700">{item.MaNV}</div>
                 <div className="col-span-3 min-w-0">
                   <p className="font-medium text-gray-800 truncate">{item.HoTen}</p>
-                  <p className="text-[11px] text-gray-400 truncate">{item.ChucVu || item.VaiTro}</p>
+                  <p className="text-[11px] text-gray-400 truncate">{item.ChucVu || ROLE_LABEL[normalizeRole(item.VaiTro)] || item.VaiTro}</p>
                   <span className={clsx('inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold', item.TrangThai === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600')}>{item.TrangThai}</span>
                 </div>
                 <div className="col-span-2 text-xs text-gray-600">{item.TenBP || '—'}</div>
@@ -339,13 +305,14 @@ export default function NhanVien() {
                   <p className="flex items-center gap-1"><Phone size={12} /> {item.SDT || '—'}</p>
                   <p className="flex items-center gap-1 truncate"><Mail size={12} /> {item.Email || '—'}</p>
                 </div>
-                <div className="col-span-1 flex justify-end"><button onClick={() => openEdit(item)} className="text-xs font-semibold text-brand-600 hover:underline">Sửa</button></div>
+                <div className="col-span-1 flex justify-end">{canEditEmployee && <button onClick={() => openEdit(item)} className="text-xs font-semibold text-brand-600 hover:underline">Sửa</button>}</div>
               </div>
             ))}
           </div>
         </div>
 
         <div className="space-y-4 overflow-y-auto">
+          {canResetPassword && (
           <div className="card">
             <div className="flex items-center gap-2 mb-3"><KeyRound size={16} className="text-brand-500" /><h3 className="font-semibold text-gray-800">Đặt lại mật khẩu</h3></div>
             <input value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} type="password" placeholder="Nhập mật khẩu mới..." className="input text-sm mb-3" />
@@ -364,6 +331,7 @@ export default function NhanVien() {
               ))}
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>

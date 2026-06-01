@@ -3,7 +3,7 @@ const router  = express.Router();
 const ctrl    = require('../controllers/baocao.controller');
 const { authenticate, authorize } = require('../middleware/auth');
 
-router.use(authenticate, authorize('admin', 'quan_ly_chinhanh'));
+router.use(authenticate, authorize('admin', 'giam_doc_van_hanh', 'quan_ly_chinhanh'));
 
 router.get('/dashboard',           ctrl.dashboard);           // Card KPIs real-time
 router.get('/doanh-thu-theo-ngay', ctrl.doanhThuTheoNgay);   // Chart doanh thu

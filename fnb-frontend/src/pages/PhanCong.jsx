@@ -1,49 +1,31 @@
-/**
- * UI 08 — Phân công Ca làm việc (/phan-cong)
- * Roles: role_admin, role_readonly
- *
- * Tính năng:
- *  - Lịch tuần: 7 cột (T2–CN) × 3 ca (Sáng / Chiều / Tối)
- *  - Chọn tuần bằng nút ← →
- *  - Thêm phân công: chọn ngày + ca + nhân viên → thêm vào ô
- *  - Xoá phân công: nhấn × trên chip nhân viên
- *  - Hiển thị tên + badge vai trò trong mỗi chip
- *  - Tab "Danh sách" để xem toàn bộ theo dạng bảng
- */
-import { useState, useMemo } from 'react'
-import { CalendarDays, Plus, X, ChevronLeft, ChevronRight, Users, List } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { CalendarDays, Plus, X, ChevronLeft, ChevronRight, Users } from 'lucide-react'
 import clsx from 'clsx'
-import { MOCK_PHAN_CONG, MOCK_NHAN_VIEN } from '../lib/mock'
+import toast from 'react-hot-toast'
+
+import api from '../lib/api'
 import useAuthStore from '../store/authStore'
+import { ROLE, normalizeRole } from '../lib/roles'
 
-const USE_MOCK = true
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const CA_LIST = [
-  { id: 'CA001', label: 'Ca Sáng',  time: '06:00–12:00', color: 'bg-amber-500/10 border-amber-500/30 text-amber-300' },
-  { id: 'CA002', label: 'Ca Chiều', time: '12:00–18:00', color: 'bg-blue-500/10 border-blue-500/30 text-blue-300' },
-  { id: 'CA003', label: 'Ca Tối',   time: '18:00–23:00', color: 'bg-purple-500/10 border-purple-500/30 text-purple-300' },
-]
-
-const DOW = ['T2','T3','T4','T5','T6','T7','CN']
+const DOW = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
 
 const ROLE_LABEL = {
-  role_admin:            'Admin',
-  role_readonly: 'Quản lý',
-  role_cashier:         'Thu ngân',
-  role_warehouse_staff:              'Kho vận',
+  [ROLE.ADMIN]: 'Admin',
+  [ROLE.BRANCH_MANAGER]: 'Quản lý chi nhánh',
+  [ROLE.CASHIER]: 'Thu ngân',
+  [ROLE.WAREHOUSE]: 'Kho vận',
 }
 
 const ROLE_COLOR = {
-  role_admin:            'bg-purple-500/20 text-purple-300',
-  role_readonly: 'bg-blue-500/20 text-blue-300',
-  role_cashier:         'bg-amber-500/20 text-amber-300',
-  role_warehouse_staff:              'bg-green-500/20 text-green-300',
+  [ROLE.ADMIN]: 'bg-purple-500/20 text-purple-300',
+  [ROLE.BRANCH_MANAGER]: 'bg-blue-500/20 text-blue-300',
+  [ROLE.CASHIER]: 'bg-amber-500/20 text-amber-300',
+  [ROLE.WAREHOUSE]: 'bg-green-500/20 text-green-300',
 }
 
 function getMonday(date) {
   const d = new Date(date)
-  const day = d.getDay() // 0=Sun
+  const day = d.getDay()
   const diff = d.getDate() - day + (day === 0 ? -6 : 1)
   return new Date(d.setDate(diff))
 }
@@ -59,17 +41,55 @@ function dateKey(date) {
 }
 
 function formatDate(date) {
-  return `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}`
+  return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
-function genMaPC() {
-  const now = new Date()
-  const yyyymmdd = now.toISOString().slice(0,10).replace(/-/g,'')
-  const rand = Math.floor(Math.random() * 900 + 100)
-  return `PC${yyyymmdd}${rand}`
+function formatTime(value) {
+  if (!value) return ''
+  return String(value).slice(0, 5)
 }
 
-// ─── Component chip nhân viên ─────────────────────────────────────────────────
+function shiftColor(maCa, index = 0) {
+  if (maCa === 'CA001') return 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+  if (maCa === 'CA002') return 'bg-blue-500/10 border-blue-500/30 text-blue-300'
+  if (maCa === 'CA003') return 'bg-purple-500/10 border-purple-500/30 text-purple-300'
+  return [
+    'bg-amber-500/10 border-amber-500/30 text-amber-300',
+    'bg-blue-500/10 border-blue-500/30 text-blue-300',
+    'bg-purple-500/10 border-purple-500/30 text-purple-300',
+  ][index % 3]
+}
+
+function normalizeShift(item, index = 0) {
+  return {
+    id: item.MaCa || item.maca,
+    label: item.TenCa || item.tenca,
+    time: `${formatTime(item.GioBatDau || item.giobatdau)}–${formatTime(item.GioKetThuc || item.gioketthuc)}`,
+    color: shiftColor(item.MaCa || item.maca, index),
+  }
+}
+
+function normalizeEmployee(item) {
+  return {
+    MaNV: item.MaNV || item.manv,
+    HoTen: item.HoTen || item.hoten,
+    VaiTro: normalizeRole(item.VaiTro || item.vaitro),
+  }
+}
+
+function normalizeAssignment(item) {
+  return {
+    MaPC: String(item.MaPC || item.mapc),
+    MaNV: item.MaNV || item.manv,
+    HoTen: item.HoTen || item.hoten,
+    NgayLam: String(item.NgayLam || item.ngaylam).slice(0, 10),
+    MaCa: item.MaCa || item.maca,
+    GioBatDau: formatTime(item.GioBatDau || item.giobatdau),
+    GioKetThuc: formatTime(item.GioKetThuc || item.gioketthuc),
+    TrangThai: item.TrangThai || item.trangthai || 'Scheduled',
+  }
+}
+
 function NVChip({ nv, onRemove, canEdit }) {
   return (
     <div className="flex items-center gap-1.5 bg-surface rounded-md px-2 py-1 text-xs group">
@@ -77,8 +97,8 @@ function NVChip({ nv, onRemove, canEdit }) {
         <span className="text-brand-400 text-[9px] font-bold">{nv.HoTen.charAt(0)}</span>
       </div>
       <span className="text-gray-200 truncate max-w-[80px]">{nv.HoTen}</span>
-      <span className={clsx('text-[9px] px-1 py-0.5 rounded font-medium shrink-0', ROLE_COLOR[nv.VaiTro])}>
-        {ROLE_LABEL[nv.VaiTro]}
+      <span className={clsx('text-[9px] px-1 py-0.5 rounded font-medium shrink-0', ROLE_COLOR[nv.VaiTro] || 'bg-white/10 text-gray-300')}>
+        {ROLE_LABEL[nv.VaiTro] || nv.VaiTro || 'Nhân viên'}
       </span>
       {canEdit && (
         <button
@@ -92,80 +112,112 @@ function NVChip({ nv, onRemove, canEdit }) {
   )
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function PhanCong() {
   const user = useAuthStore((s) => s.user)
-  const canEdit = ['role_admin'].includes(user?.vaiTro)
+  const role = normalizeRole(user?.vaiTro)
+  const canEdit = [ROLE.ADMIN, ROLE.BRANCH_MANAGER].includes(role)
 
-  // State tuần hiện tại
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()))
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
 
-  // State phân công
-  const [records, setRecords] = useState(USE_MOCK ? MOCK_PHAN_CONG : [])
-
-  // Tab: 'calendar' | 'list'
+  const [shifts, setShifts] = useState([])
+  const [employees, setEmployees] = useState([])
+  const [records, setRecords] = useState([])
+  const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState('calendar')
-
-  // Modal thêm phân công
   const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({ NgayLam: dateKey(new Date()), MaCa: 'CA001', MaNV: '' })
+  const [submitting, setSubmitting] = useState(false)
+  const [form, setForm] = useState({ NgayLam: dateKey(new Date()), MaCa: '', MaNV: '' })
   const [filterNV, setFilterNV] = useState('')
 
-  // ─── Week nav ───────────────────────────────────────────────────────────────
+  const loadMeta = useCallback(async () => {
+    try {
+      const [shiftRes, employeeRes] = await Promise.all([
+        api.get('/phan-cong/ca-lam'),
+        api.get('/nhan-vien', { params: { trangThai: 'Active' } }),
+      ])
+      const normalizedShifts = (shiftRes.data || []).map((item, index) => normalizeShift(item, index))
+      setShifts(normalizedShifts)
+      setEmployees((employeeRes.data || []).map(normalizeEmployee))
+      setForm((prev) => ({ ...prev, MaCa: prev.MaCa || normalizedShifts[0]?.id || '' }))
+    } catch (err) {
+      toast.error(err.message || 'Không tải được dữ liệu phân công')
+    }
+  }, [])
+
+  const loadAssignments = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await api.get('/phan-cong', { params: { tuan: dateKey(weekStart) } })
+      setRecords((res.data || []).map(normalizeAssignment))
+    } catch (err) {
+      toast.error(err.message || 'Không tải được lịch phân công')
+    } finally {
+      setLoading(false)
+    }
+  }, [weekStart])
+
+  useEffect(() => {
+    loadMeta()
+  }, [loadMeta])
+
+  useEffect(() => {
+    loadAssignments()
+  }, [loadAssignments])
+
   const weekLabel = `${formatDate(weekDays[0])} – ${formatDate(weekDays[6])}/${weekDays[6].getFullYear()}`
+  const nvMap = useMemo(() => Object.fromEntries(employees.map((n) => [n.MaNV, n])), [employees])
 
-  // ─── Lookup ─────────────────────────────────────────────────────────────────
-  const nvMap = useMemo(() => Object.fromEntries(MOCK_NHAN_VIEN.map(n => [n.MaNV, n])), [])
-
-  // records theo ngày+ca
   const cellMap = useMemo(() => {
-    const m = {}
-    records.forEach(r => {
-      const k = `${r.NgayLam}_${r.MaCa}`
-      if (!m[k]) m[k] = []
-      m[k].push(r)
+    const map = {}
+    records.forEach((record) => {
+      const key = `${record.NgayLam}_${record.MaCa}`
+      if (!map[key]) map[key] = []
+      map[key].push(record)
     })
-    return m
+    return map
   }, [records])
 
-  // ─── Handlers ───────────────────────────────────────────────────────────────
-  function handleAdd() {
-    if (!form.MaNV) return
-    const nv = MOCK_NHAN_VIEN.find(n => n.MaNV === form.MaNV)
-    // tránh trùng
-    const dup = records.find(r => r.NgayLam === form.NgayLam && r.MaCa === form.MaCa && r.MaNV === form.MaNV)
-    if (dup) { setShowModal(false); return }
-    const ca = CA_LIST.find(c => c.id === form.MaCa)
-    const newRec = {
-      MaPC: genMaPC(),
-      MaNV: form.MaNV,
-      HoTen: nv.HoTen,
-      NgayLam: form.NgayLam,
-      MaCa: form.MaCa,
-      GioBatDau: ca.time.split('–')[0],
-      GioKetThuc: ca.time.split('–')[1],
-      GhiChu: '',
-    }
-    setRecords(prev => [newRec, ...prev])
-    setShowModal(false)
-    setForm({ NgayLam: dateKey(new Date()), Ca: 'sang', MaNV: '' })
-  }
+  const filteredEmployees = useMemo(() => {
+    const q = filterNV.trim().toLowerCase()
+    if (!q) return employees
+    return employees.filter((nv) => nv.HoTen.toLowerCase().includes(q) || nv.MaNV.toLowerCase().includes(q))
+  }, [employees, filterNV])
 
-  function handleRemove(MaPC) {
-    setRecords(prev => prev.filter(r => r.MaPC !== MaPC))
-  }
-
-  // ─── KPI ─────────────────────────────────────────────────────────────────────
   const weekKeys = weekDays.map(dateKey)
-  const weekRecords = records.filter(r => weekKeys.includes(r.NgayLam))
-  const assignedNV = new Set(weekRecords.map(r => r.MaNV)).size
+  const weekRecords = records.filter((r) => weekKeys.includes(r.NgayLam))
+  const assignedNV = new Set(weekRecords.map((r) => r.MaNV)).size
   const totalSlots = weekRecords.length
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
+  const handleAdd = async () => {
+    if (!form.MaNV || !form.MaCa || !form.NgayLam) return
+    setSubmitting(true)
+    try {
+      const res = await api.post('/phan-cong', form)
+      toast.success(res.message || 'Thêm phân công thành công')
+      setShowModal(false)
+      setFilterNV('')
+      setForm({ NgayLam: dateKey(new Date()), MaCa: shifts[0]?.id || '', MaNV: '' })
+      await loadAssignments()
+    } catch (err) {
+      toast.error(err.message || 'Không thêm được phân công')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleRemove = async (MaPC) => {
+    try {
+      const res = await api.delete(`/phan-cong/${MaPC}`)
+      toast.success(res.message || 'Đã xoá phân công')
+      await loadAssignments()
+    } catch (err) {
+      toast.error(err.message || 'Không xoá được phân công')
+    }
+  }
+
   return (
     <div className="p-6 space-y-5">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
@@ -185,13 +237,12 @@ export default function PhanCong() {
         )}
       </div>
 
-      {/* KPI strip */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: 'Tổng ca tuần này', value: totalSlots, sub: `${weekRecords.filter(r=>r.MaCa==='CA001').length} sáng · ${weekRecords.filter(r=>r.MaCa==='CA002').length} chiều · ${weekRecords.filter(r=>r.MaCa==='CA003').length} tối` },
-          { label: 'Nhân viên được phân công', value: assignedNV, sub: `/${MOCK_NHAN_VIEN.length} nhân viên` },
+          { label: 'Tổng ca tuần này', value: totalSlots, sub: `${weekRecords.filter((r) => r.MaCa === shifts[0]?.id).length} ca 1 · ${weekRecords.filter((r) => r.MaCa === shifts[1]?.id).length} ca 2 · ${weekRecords.filter((r) => r.MaCa === shifts[2]?.id).length} ca 3` },
+          { label: 'Nhân viên được phân công', value: assignedNV, sub: `/${employees.length} nhân viên` },
           { label: 'Tuần xem', value: weekLabel, sub: 'Tuần đang chọn', isText: true },
-        ].map(k => (
+        ].map((k) => (
           <div key={k.label} className="bg-surface rounded-xl p-4 border border-white/5">
             <p className="text-gray-500 text-xs">{k.label}</p>
             <p className={clsx('font-bold mt-1', k.isText ? 'text-base text-brand-400' : 'text-2xl text-white')}>{k.value}</p>
@@ -200,10 +251,9 @@ export default function PhanCong() {
         ))}
       </div>
 
-      {/* Tab + Week nav */}
       <div className="flex items-center justify-between">
         <div className="flex gap-1 bg-surface rounded-lg p-1 border border-white/5">
-          {[['calendar','Lịch tuần'],['list','Danh sách']].map(([id,label]) => (
+          {[['calendar', 'Lịch tuần'], ['list', 'Danh sách']].map(([id, label]) => (
             <button
               key={id}
               onClick={() => setTab(id)}
@@ -217,14 +267,14 @@ export default function PhanCong() {
         {tab === 'calendar' && (
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setWeekStart(d => addDays(d, -7))}
+              onClick={() => setWeekStart((d) => addDays(d, -7))}
               className="p-1.5 rounded-lg bg-surface border border-white/5 text-gray-400 hover:text-white transition-colors"
             >
               <ChevronLeft size={16} />
             </button>
             <span className="text-sm text-gray-300 font-medium min-w-[140px] text-center">{weekLabel}</span>
             <button
-              onClick={() => setWeekStart(d => addDays(d, 7))}
+              onClick={() => setWeekStart((d) => addDays(d, 7))}
               className="p-1.5 rounded-lg bg-surface border border-white/5 text-gray-400 hover:text-white transition-colors"
             >
               <ChevronRight size={16} />
@@ -233,7 +283,6 @@ export default function PhanCong() {
         )}
       </div>
 
-      {/* ── Calendar view ────────────────────────────────────────────────────── */}
       {tab === 'calendar' && (
         <div className="bg-surface rounded-xl border border-white/5 overflow-x-auto">
           <table className="w-full min-w-[900px]">
@@ -253,7 +302,7 @@ export default function PhanCong() {
               </tr>
             </thead>
             <tbody>
-              {CA_LIST.map(ca => (
+              {shifts.map((ca) => (
                 <tr key={ca.id} className="border-b border-white/5 last:border-0">
                   <td className="px-4 py-3 align-top">
                     <div className={clsx('inline-block px-2 py-1 rounded-lg border text-[11px] font-semibold', ca.color)}>
@@ -262,15 +311,15 @@ export default function PhanCong() {
                     <div className="text-gray-600 text-[10px] mt-1">{ca.time}</div>
                   </td>
                   {weekDays.map((d, i) => {
-                    const k = `${dateKey(d)}_${ca.id}`
-                    const cell = cellMap[k] || []
+                    const key = `${dateKey(d)}_${ca.id}`
+                    const cell = cellMap[key] || []
                     return (
                       <td key={i} className="px-2 py-2 align-top min-h-[70px]">
                         <div className="space-y-1 min-h-[56px]">
-                          {cell.map(r => (
+                          {cell.map((r) => (
                             <NVChip
                               key={r.MaPC}
-                              nv={nvMap[r.MaNV] || { HoTen: r.HoTen, VaiTro: 'role_warehouse_staff' }}
+                              nv={nvMap[r.MaNV] || { HoTen: r.HoTen, VaiTro: ROLE.CASHIER }}
                               canEdit={canEdit}
                               onRemove={() => handleRemove(r.MaPC)}
                             />
@@ -294,10 +343,10 @@ export default function PhanCong() {
               ))}
             </tbody>
           </table>
+          {loading && <div className="p-4 text-center text-gray-500 text-sm">Đang tải lịch phân công...</div>}
         </div>
       )}
 
-      {/* ── List view ─────────────────────────────────────────────────────────── */}
       {tab === 'list' && (
         <div className="bg-surface rounded-xl border border-white/5 overflow-hidden">
           <div className="p-4 border-b border-white/5 flex items-center gap-3">
@@ -308,7 +357,7 @@ export default function PhanCong() {
             <table className="w-full text-sm">
               <thead className="border-b border-white/5">
                 <tr>
-                  {['Mã PC','Ngày','Ca','Nhân viên','Vai trò','Giờ làm','Ghi chú'].map(h => (
+                  {['Mã PC', 'Ngày', 'Ca', 'Nhân viên', 'Vai trò', 'Giờ làm', 'Trạng thái'].map((h) => (
                     <th key={h} className="text-left px-4 py-3 text-gray-500 text-xs font-semibold uppercase tracking-wider">{h}</th>
                   ))}
                   {canEdit && <th className="px-4 py-3" />}
@@ -317,9 +366,9 @@ export default function PhanCong() {
               <tbody>
                 {records
                   .slice()
-                  .sort((a,b) => b.NgayLam.localeCompare(a.NgayLam))
-                  .map(r => {
-                    const ca = CA_LIST.find(c => c.id === r.MaCa)
+                  .sort((a, b) => b.NgayLam.localeCompare(a.NgayLam))
+                  .map((r) => {
+                    const ca = shifts.find((c) => c.id === r.MaCa)
                     const nv = nvMap[r.MaNV] || {}
                     return (
                       <tr key={r.MaPC} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors">
@@ -332,18 +381,15 @@ export default function PhanCong() {
                         </td>
                         <td className="px-4 py-3 text-white font-medium">{r.HoTen}</td>
                         <td className="px-4 py-3">
-                          <span className={clsx('text-xs px-1.5 py-0.5 rounded font-medium', ROLE_COLOR[nv.VaiTro])}>
-                            {ROLE_LABEL[nv.VaiTro] || r.VaiTro}
+                          <span className={clsx('text-xs px-1.5 py-0.5 rounded font-medium', ROLE_COLOR[nv.VaiTro] || 'bg-white/10 text-gray-300')}>
+                            {ROLE_LABEL[nv.VaiTro] || 'Nhân viên'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-400 text-xs">{r.GioBatDau} – {r.GioKetThuc}</td>
-                        <td className="px-4 py-3 text-gray-500 text-xs">{r.GhiChu || '—'}</td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">{r.TrangThai}</td>
                         {canEdit && (
                           <td className="px-4 py-3">
-                            <button
-                              onClick={() => handleRemove(r.MaPC)}
-                              className="text-gray-600 hover:text-red-400 transition-colors"
-                            >
+                            <button onClick={() => handleRemove(r.MaPC)} className="text-gray-600 hover:text-red-400 transition-colors">
                               <X size={14} />
                             </button>
                           </td>
@@ -353,18 +399,16 @@ export default function PhanCong() {
                   })}
               </tbody>
             </table>
-            {records.length === 0 && (
+            {!loading && records.length === 0 && (
               <div className="text-center py-12 text-gray-600">Chưa có phân công nào</div>
             )}
           </div>
         </div>
       )}
 
-      {/* ── Modal thêm phân công ────────────────────────────────────────────── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-sidebar rounded-2xl border border-white/10 w-full max-w-md shadow-2xl">
-            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
               <h3 className="text-white font-bold text-base">Thêm phân công ca</h3>
               <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-white transition-colors">
@@ -373,28 +417,26 @@ export default function PhanCong() {
             </div>
 
             <div className="p-6 space-y-4">
-              {/* Ngày */}
               <div>
                 <label className="block text-xs text-gray-400 font-medium mb-1.5">Ngày làm việc</label>
                 <input
                   type="date"
                   value={form.NgayLam}
-                  onChange={e => setForm(f => ({ ...f, NgayLam: e.target.value }))}
+                  onChange={(e) => setForm((f) => ({ ...f, NgayLam: e.target.value }))}
                   className="w-full bg-surface border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
                 />
               </div>
 
-              {/* Ca */}
               <div>
                 <label className="block text-xs text-gray-400 font-medium mb-1.5">Ca làm việc</label>
                 <div className="grid grid-cols-3 gap-2">
-                  {CA_LIST.map(ca => (
+                  {shifts.map((ca) => (
                     <button
                       key={ca.id}
-                      onClick={() => setForm(f => ({ ...f, MaCa: ca.id }))}
+                      onClick={() => setForm((f) => ({ ...f, MaCa: ca.id }))}
                       className={clsx(
                         'px-3 py-2 rounded-lg border text-xs font-medium transition-colors text-center',
-                        form.MaCa === ca.id ? ca.color + ' border-current' : 'border-white/10 text-gray-500 hover:border-white/20'
+                        form.MaCa === ca.id ? `${ca.color} border-current` : 'border-white/10 text-gray-500 hover:border-white/20'
                       )}
                     >
                       <div>{ca.label}</div>
@@ -404,26 +446,23 @@ export default function PhanCong() {
                 </div>
               </div>
 
-              {/* Nhân viên */}
               <div>
                 <label className="block text-xs text-gray-400 font-medium mb-1.5">Nhân viên</label>
                 <input
                   type="text"
                   placeholder="Tìm tên nhân viên..."
                   value={filterNV}
-                  onChange={e => setFilterNV(e.target.value)}
+                  onChange={(e) => setFilterNV(e.target.value)}
                   className="w-full bg-surface border border-white/10 rounded-lg px-3 py-2 text-white text-sm mb-2 focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-gray-600"
                 />
                 <div className="space-y-1 max-h-40 overflow-y-auto">
-                  {MOCK_NHAN_VIEN.filter(n => n.HoTen.toLowerCase().includes(filterNV.toLowerCase())).map(nv => (
+                  {filteredEmployees.map((nv) => (
                     <button
                       key={nv.MaNV}
-                      onClick={() => setForm(f => ({ ...f, MaNV: nv.MaNV }))}
+                      onClick={() => setForm((f) => ({ ...f, MaNV: nv.MaNV }))}
                       className={clsx(
                         'w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors text-left',
-                        form.MaNV === nv.MaNV
-                          ? 'border-brand-500 bg-brand-500/10'
-                          : 'border-white/5 hover:bg-white/5'
+                        form.MaNV === nv.MaNV ? 'border-brand-500 bg-brand-500/10' : 'border-white/5 hover:bg-white/5'
                       )}
                     >
                       <div className="w-7 h-7 rounded-full bg-brand-500/20 flex items-center justify-center shrink-0">
@@ -431,7 +470,7 @@ export default function PhanCong() {
                       </div>
                       <div>
                         <p className="text-white text-sm font-medium">{nv.HoTen}</p>
-                        <p className="text-gray-500 text-xs">{ROLE_LABEL[nv.VaiTro]}</p>
+                        <p className="text-gray-500 text-xs">{ROLE_LABEL[nv.VaiTro] || 'Nhân viên'}</p>
                       </div>
                       {form.MaNV === nv.MaNV && (
                         <div className="ml-auto w-4 h-4 rounded-full bg-brand-500 flex items-center justify-center">
@@ -453,10 +492,10 @@ export default function PhanCong() {
               </button>
               <button
                 onClick={handleAdd}
-                disabled={!form.MaNV}
+                disabled={!form.MaNV || !form.MaCa || submitting}
                 className="flex-1 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
               >
-                Thêm phân công
+                {submitting ? 'Đang lưu...' : 'Thêm phân công'}
               </button>
             </div>
           </div>

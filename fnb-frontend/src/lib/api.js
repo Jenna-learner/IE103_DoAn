@@ -3,7 +3,6 @@
  * JWT token tự động được đính kèm qua interceptor
  */
 import axios from 'axios'
-import { getStoredToken, isMockSession } from './mockSession'
 
 const api = axios.create({
   baseURL: '/api/v1',   // Vite proxy → http://localhost:5000/api/v1
@@ -13,7 +12,7 @@ const api = axios.create({
 
 // ── REQUEST: tự gắn JWT token vào header ──────────────────
 api.interceptors.request.use((config) => {
-  const token = getStoredToken()
+  const token = localStorage.getItem('fnb_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -25,7 +24,7 @@ api.interceptors.response.use(
     const msg = err.response?.data?.message || 'Lỗi kết nối server.'
 
     // Token hết hạn → tự logout
-    if ((err.response?.status === 401 || err.response?.status === 403) && !isMockSession()) {
+    if (err.response?.status === 401 || err.response?.status === 403) {
       localStorage.removeItem('fnb_token')
       localStorage.removeItem('fnb_user')
       window.location.href = '/login'

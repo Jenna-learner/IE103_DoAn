@@ -2,12 +2,10 @@
  * HoaDonDetail.jsx — Trang chi tiết hóa đơn (/hoa-don/:maHD)
  *
  * - Hiển thị đầy đủ: header, khách hàng, sản phẩm, thanh toán
- * - Nút Huỷ đơn: role_admin + role_readonly + role_cashier
+ * - Nút Huỷ đơn: admin + quản lý chi nhánh
  * - Nút In hóa đơn (window.print)
  * - Nút ← Quay lại danh sách
  *
- * USE_MOCK = true → tìm trong MOCK_ORDERS
- * USE_MOCK = false → GET /api/v1/hoa-don/:maHD
  */
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -19,12 +17,9 @@ import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 import api from '../lib/api'
-import { MOCK_ORDERS } from '../lib/mock'
 import { fmtCurrency, membershipStyle } from '../lib/format'
 import { useAuthStore } from '../store/authStore'
-
-/* ── Feature flag ─────────────────────────────────────────────────────────── */
-const USE_MOCK = true
+import { ROLE } from '../lib/roles'
 
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
 const STATUS_STYLE = {
@@ -33,8 +28,8 @@ const STATUS_STYLE = {
   Cancelled: 'bg-red-100 text-red-600',
 }
 const STATUS_LABEL = { Completed: 'Hoàn thành', Pending: 'Đang xử lý', Cancelled: 'Đã huỷ' }
-const PAY_ICON  = { Cash: '💵', Card: '💳', 'E-Wallet': '📱' }
-const PAY_LABEL = { Cash: 'Tiền mặt', Card: 'Thẻ ngân hàng', 'E-Wallet': 'Ví điện tử' }
+const PAY_ICON  = { Cash: '💵', Card: '💳', 'E-Wallet': '📱', EWallet: '📱', BankTransfer: '🏦' }
+const PAY_LABEL = { Cash: 'Tiền mặt', Card: 'Thẻ ngân hàng', 'E-Wallet': 'Ví điện tử', EWallet: 'Ví điện tử', BankTransfer: 'Chuyển khoản' }
 
 function fmtDateTime(iso) {
   return new Date(iso).toLocaleString('vi-VN', {
@@ -66,23 +61,15 @@ export default function HoaDonDetail() {
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState(false)
 
-  // role_cashier + role_admin + quan_ly đều được huỷ
-  const canCancel = ['role_admin', 'role_cashier'].includes(user?.vaiTro)
+  const canCancel = [ROLE.ADMIN, ROLE.BRANCH_MANAGER].includes(user?.vaiTro)
 
   /* ── Load ── */
   useEffect(() => {
     const load = async () => {
       setLoading(true)
       try {
-        if (USE_MOCK) {
-          await new Promise(r => setTimeout(r, 250))
-          const found = MOCK_ORDERS.find(o => o.MaHD === maHD)
-          if (!found) { toast.error('Không tìm thấy hóa đơn'); navigate('/hoa-don'); return }
-          setOrder(found)
-        } else {
-          const data = await api.get(`/hoa-don/${maHD}`)
-          setOrder(data)
-        }
+        const data = await api.get(`/hoa-don/${maHD}`)
+        setOrder(data.data)
       } catch {
         toast.error('Không tải được hóa đơn')
         navigate('/hoa-don')
@@ -98,15 +85,9 @@ export default function HoaDonDetail() {
     if (!window.confirm(`Bạn có chắc muốn huỷ đơn hàng ${order.MaHD}?`)) return
     setCancelling(true)
     try {
-      if (USE_MOCK) {
-        await new Promise(r => setTimeout(r, 400))
-        setOrder(prev => ({ ...prev, TrangThai: 'Cancelled' }))
-        toast.success('Đã huỷ hóa đơn')
-      } else {
-        await api.patch(`/hoa-don/${order.MaHD}/huy`)
-        toast.success('Đã huỷ hóa đơn và hoàn kho')
-        setOrder(prev => ({ ...prev, TrangThai: 'Cancelled' }))
-      }
+      await api.patch(`/hoa-don/${order.MaHD}/huy`)
+      toast.success('Đã huỷ hóa đơn và hoàn kho')
+      setOrder(prev => ({ ...prev, TrangThai: 'Cancelled' }))
     } catch {
       toast.error('Không thể huỷ hóa đơn')
     } finally {

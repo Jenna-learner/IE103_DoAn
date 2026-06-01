@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Coffee, Plus, RefreshCw, Search, Database,
+  Coffee, Plus, RefreshCw, Search,
   ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, Trash2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 import api from '../lib/api'
-import { MOCK_CATEGORIES, MOCK_PRODUCTS, MOCK_TONKHO } from '../lib/mock'
 import { fmtCurrency, fmtNumber } from '../lib/format'
-import { isMockSession } from '../lib/mockSession'
 
 const EMPTY_FORM = {
   MaSP: '',
@@ -149,7 +147,6 @@ export default function SanPham() {
   const [filterStatus, setFilterStatus] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [usingFallback, setUsingFallback] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
@@ -157,16 +154,6 @@ export default function SanPham() {
 
   const loadData = useCallback(async (showToast = false) => {
     setLoading(true)
-    if (isMockSession()) {
-      setProducts(MOCK_PRODUCTS.map(normalizeProduct))
-      setCategories(MOCK_CATEGORIES.map(normalizeCategory))
-      setIngredients(MOCK_TONKHO.map(normalizeIngredient))
-      setUsingFallback(true)
-      setDetailMap({})
-      setLoading(false)
-      if (showToast) toast.success('Đã làm mới dữ liệu demo sản phẩm')
-      return
-    }
     try {
       const [productRes, categoryRes, ingredientRes] = await Promise.all([
         api.get('/san-pham', { params: { trangThai: '' } }),
@@ -176,15 +163,10 @@ export default function SanPham() {
       setProducts((productRes.data || []).map(normalizeProduct))
       setCategories((categoryRes.data || []).map(normalizeCategory))
       setIngredients((ingredientRes.data || []).map(normalizeIngredient))
-      setUsingFallback(false)
       setDetailMap({})
       if (showToast) toast.success('Đã làm mới dữ liệu sản phẩm')
     } catch (err) {
-      setProducts(MOCK_PRODUCTS.map(normalizeProduct))
-      setCategories(MOCK_CATEGORIES.map(normalizeCategory))
-      setIngredients(MOCK_TONKHO.map(normalizeIngredient))
-      setUsingFallback(true)
-      toast.error(err.message || 'Không tải được dữ liệu sản phẩm, đang hiển thị dữ liệu demo')
+      toast.error(err.message || 'Không tải được dữ liệu sản phẩm')
     } finally {
       setLoading(false)
     }
@@ -206,7 +188,7 @@ export default function SanPham() {
   }, [products, filterCategory, filterStatus, search])
 
   const loadProductDetail = async (maSP) => {
-    if (detailMap[maSP] || usingFallback) return
+    if (detailMap[maSP]) return
     setDetailLoadingMap((prev) => ({ ...prev, [maSP]: true }))
     try {
       const res = await api.get(`/san-pham/${maSP}`)
@@ -235,11 +217,6 @@ export default function SanPham() {
     setEditingId(product.MaSP)
     setForm({ ...product, GiaBan: product.GiaBan })
     setShowForm(true)
-
-    if (usingFallback) {
-      setRecipe([EMPTY_RECIPE])
-      return
-    }
 
     try {
       const res = await api.get(`/san-pham/${product.MaSP}`)
@@ -282,17 +259,7 @@ export default function SanPham() {
         })),
       }
 
-      if (usingFallback) {
-        const category = categories.find((item) => item.MaLoai === payload.MaLoai)
-        const normalized = normalizeProduct({ ...payload, TenLoai: category?.TenLoai })
-        if (editingId) {
-          setProducts((prev) => prev.map((item) => item.MaSP === editingId ? normalized : item))
-          toast.success('Đã cập nhật sản phẩm (demo)')
-        } else {
-          setProducts((prev) => [normalized, ...prev])
-          toast.success('Đã thêm sản phẩm (demo)')
-        }
-      } else if (editingId) {
+      if (editingId) {
         const res = await api.put(`/san-pham/${editingId}`, payload)
         toast.success(res.message || 'Đã cập nhật sản phẩm')
         await loadData()
@@ -315,14 +282,9 @@ export default function SanPham() {
 
   const handleStatusChange = async (maSP, TrangThai) => {
     try {
-      if (usingFallback) {
-        setProducts((prev) => prev.map((item) => item.MaSP === maSP ? { ...item, TrangThai } : item))
-        toast.success(`Đã chuyển trạng thái sản phẩm → ${TrangThai} (demo)`)
-      } else {
-        const res = await api.patch(`/san-pham/${maSP}/trang-thai`, { TrangThai })
-        toast.success(res.message || 'Đã cập nhật trạng thái sản phẩm')
-        await loadData()
-      }
+      const res = await api.patch(`/san-pham/${maSP}/trang-thai`, { TrangThai })
+      toast.success(res.message || 'Đã cập nhật trạng thái sản phẩm')
+      await loadData()
     } catch (err) {
       toast.error(err.message || 'Không cập nhật được trạng thái sản phẩm')
     }
@@ -354,7 +316,6 @@ export default function SanPham() {
           <option value="Inactive">Inactive</option>
           <option value="Out of stock">Out of stock</option>
         </select>
-        {usingFallback && <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 text-xs font-semibold"><Database size={13} /> Dữ liệu demo</span>}
         <button onClick={() => loadData(true)} className="btn-secondary text-sm px-3 py-2" disabled={loading}><RefreshCw size={14} className={clsx(loading && 'animate-spin')} /> Làm mới</button>
         <button onClick={openCreate} className="btn-primary text-sm px-3 py-2"><Plus size={14} /> Thêm sản phẩm</button>
       </div>
