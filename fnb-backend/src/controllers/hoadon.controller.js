@@ -4,8 +4,64 @@ const { success, error, paginated } = require('../utils/response');
 
 const DISCOUNT_RATE = { Bronze: 0, Silver: 0.03, Gold: 0.05, Platinum: 0.1 };
 
-const mapPayMethod = (m) => (m === 'E-Wallet' ? 'EWallet' : m);
-const mapPayMethodOut = (m) => (m === 'EWallet' ? 'E-Wallet' : m);
+const mapPayMethod    = (m) => (m === 'E-Wallet' ? 'EWallet' : m);
+const mapPayMethodOut = (m) => (m === 'EWallet'  ? 'E-Wallet' : m);
+
+// pg trả về column names lowercase → map sang PascalCase cho frontend
+const mapRow = (r) => ({
+  MaHD:          r.mahd,
+  MaCN:          r.macn,
+  TenCN:         r.tencn,
+  MaNV:          r.manv,
+  TenNhanVien:   r.tennhanvien,
+  MaKH:          r.makh,
+  TenKH:         r.tenkh,
+  SDTKH:         r.sdtkh,
+  NgayLap:       r.ngaylap,
+  TongTienHang:  parseFloat(r.tongtienhang  || 0),
+  GiamGia:       parseFloat(r.giamgia       || 0),
+  TongThanhToan: parseFloat(r.tongthanhtoan || 0),
+  TrangThai:     r.trangthai,
+});
+
+const mapDetail = (r) => ({
+  MaHD:          r.mahd,
+  MaCN:          r.macn,
+  TenCN:         r.tencn,
+  MaKH:          r.makh,
+  TenKH:         r.tenkh,
+  SDTKH:         r.sdtkh,
+  HangThanhVien: r.hangthanhvien,
+  MaNV:          r.manv,
+  TenNhanVien:   r.tennhanvien,
+  NgayLap:       r.ngaylap,
+  LoaiDonHang:   r.loaidonhang,
+  TongTienHang:  parseFloat(r.tongtienhang  || 0),
+  GiamGia:       parseFloat(r.giamgia       || 0),
+  TongThanhToan: parseFloat(r.tongthanhtoan || 0),
+  TrangThai:     r.trangthai,
+  GhiChu:        r.ghichu,
+  CreatedAt:     r.createdat,
+  UpdatedAt:     r.updatedat,
+});
+
+const mapChiTiet = (r) => ({
+  MaSP:    r.masp,
+  TenSP:   r.tensp,
+  SoLuong: r.soluong,
+  DonGia:  parseFloat(r.dongia   || 0),
+  ThanhTien: parseFloat(r.thanhtien || 0),
+});
+
+const mapThanhToan = (r) => ({
+  MaTT:        r.matt,
+  MaHD:        r.mahd,
+  PhuongThuc:  mapPayMethodOut(r.phuongthuc),
+  SoTien:      parseFloat(r.sotien || 0),
+  NgayTT:      r.ngaytt,
+  TrangThai:   r.trangthai,
+  LoaiGiaoDich: r.loaigiaodich,
+});
 
 const getAll = async (req, res, next) => {
   try {
@@ -37,7 +93,7 @@ const getAll = async (req, res, next) => {
     );
 
     const { rows: cr } = await db.query(`SELECT COUNT(*) FROM HOADON hd ${where}`, params.slice(0, -2));
-    return paginated(res, rows, parseInt(cr[0].count), page, limit);
+    return paginated(res, rows.map(mapRow), parseInt(cr[0].count), page, limit);
   } catch (err) { next(err); }
 };
 
@@ -63,8 +119,7 @@ const getById = async (req, res, next) => {
     );
 
     const { rows: thanhToan } = await db.query(`SELECT * FROM THANHTOAN WHERE MaHD = $1 ORDER BY NgayTT DESC`, [req.params.maHD]);
-    const mapped = thanhToan.map((t) => ({ ...t, PhuongThuc: mapPayMethodOut(t.phuongthuc || t.PhuongThuc) }));
-    return success(res, { ...rows[0], chiTiet, thanhToan: mapped[0] || null });
+    return success(res, { ...mapDetail(rows[0]), chiTiet: chiTiet.map(mapChiTiet), thanhToan: thanhToan[0] ? mapThanhToan(thanhToan[0]) : null });
   } catch (err) { next(err); }
 };
 
