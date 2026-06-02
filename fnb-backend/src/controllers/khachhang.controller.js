@@ -2,6 +2,30 @@ const db = require('../config/db');
 const { genMa } = require('../utils/magen');
 const { success, error, paginated } = require('../utils/response');
 
+// pg trả về lowercase → map sang PascalCase cho frontend
+const mapRow = (r) => ({
+  MaKH:          r.makh,
+  TenKH:         r.tenkh,
+  SDT:           r.sdt,
+  Email:         r.email,
+  DiemTichLuy:   parseInt(r.diemtichluy  || 0),
+  HangThanhVien: r.hangthanhvien,
+  TrangThai:     r.trangthai,
+  NgayThamGia:   r.createdat,
+  TongDonHang:   parseInt(r.tongdonhang  || 0),
+  TongChiTieu:   parseFloat(r.tongchitieu || 0),
+});
+
+const mapSimple = (r) => ({
+  MaKH:          r.makh,
+  TenKH:         r.tenkh,
+  SDT:           r.sdt,
+  Email:         r.email,
+  DiemTichLuy:   parseInt(r.diemtichluy  || 0),
+  HangThanhVien: r.hangthanhvien,
+  TrangThai:     r.trangthai,
+});
+
 const getAll = async (req, res, next) => {
   try {
     const { sdt, hang, page = 1, limit = 20 } = req.query;
@@ -9,21 +33,27 @@ const getAll = async (req, res, next) => {
     const params = [];
     const conds = [];
 
-    if (sdt) { params.push(`%${sdt}%`); conds.push(`SDT ILIKE $${params.length}`); }
-    if (hang) { params.push(hang); conds.push(`HangThanhVien = $${params.length}`); }
+    if (sdt)  { params.push(`%${sdt}%`); conds.push(`k.SDT ILIKE $${params.length}`); }
+    if (hang) { params.push(hang);        conds.push(`k.HangThanhVien = $${params.length}`); }
 
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
     params.push(limit, offset);
 
     const { rows } = await db.query(
-      `SELECT MaKH, HoTen AS TenKH, SDT, Email, DiemTichLuy, HangThanhVien, TrangThai, CreatedAt, UpdatedAt
-       FROM KHACHHANG ${where}
-       ORDER BY DiemTichLuy DESC
+      `SELECT k.MaKH, k.HoTen AS TenKH, k.SDT, k.Email,
+              k.DiemTichLuy, k.HangThanhVien, k.TrangThai, k.CreatedAt,
+              COUNT(hd.MaHD)              AS TongDonHang,
+              COALESCE(SUM(hd.TongThanhToan), 0) AS TongChiTieu
+       FROM KHACHHANG k
+       LEFT JOIN HOADON hd ON hd.MaKH = k.MaKH AND hd.TrangThai = 'Completed'
+       ${where}
+       GROUP BY k.MaKH, k.HoTen, k.SDT, k.Email, k.DiemTichLuy, k.HangThanhVien, k.TrangThai, k.CreatedAt
+       ORDER BY k.DiemTichLuy DESC
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
-    const { rows: cr } = await db.query(`SELECT COUNT(*) FROM KHACHHANG ${where}`, params.slice(0, -2));
-    return paginated(res, rows, parseInt(cr[0].count), page, limit);
+    const { rows: cr } = await db.query(`SELECT COUNT(*) FROM KHACHHANG k ${where}`, params.slice(0, -2));
+    return paginated(res, rows.map(mapRow), parseInt(cr[0].count), page, limit);
   } catch (err) { next(err); }
 };
 
@@ -36,7 +66,7 @@ const traCuu = async (req, res, next) => {
        FROM KHACHHANG WHERE SDT = $1`,
       [sdt]
     );
-    return success(res, rows[0] || null);
+    return success(res, rows[0] ? mapSimple(rows[0]) : null);
   } catch (err) { next(err); }
 };
 
@@ -48,7 +78,7 @@ const getById = async (req, res, next) => {
       [req.params.maKH]
     );
     if (!rows[0]) return error(res, 'Không tìm thấy khách hàng.', 404);
-    return success(res, rows[0]);
+    return success(res, mapSimple(rows[0]));
   } catch (err) { next(err); }
 };
 
