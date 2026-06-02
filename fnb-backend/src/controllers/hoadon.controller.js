@@ -4,6 +4,7 @@ const { success, error, paginated } = require('../utils/response');
 
 const DISCOUNT_RATE = { Bronze: 0, Silver: 0.03, Gold: 0.05, Platinum: 0.1 };
 
+<<<<<<< HEAD
 const mapPayMethod    = (m) => (m === 'E-Wallet' ? 'EWallet' : m);
 const mapPayMethodOut = (m) => (m === 'EWallet'  ? 'E-Wallet' : m);
 
@@ -62,6 +63,10 @@ const mapThanhToan = (r) => ({
   TrangThai:   r.trangthai,
   LoaiGiaoDich: r.loaigiaodich,
 });
+=======
+const mapPayMethod = (m) => (m === 'E-Wallet' ? 'EWallet' : m);
+const mapPayMethodOut = (m) => (m === 'EWallet' ? 'E-Wallet' : m);
+>>>>>>> 74bdae40403a954677e8982c8f8e21f835a4aec5
 
 const getAll = async (req, res, next) => {
   try {
@@ -93,7 +98,11 @@ const getAll = async (req, res, next) => {
     );
 
     const { rows: cr } = await db.query(`SELECT COUNT(*) FROM HOADON hd ${where}`, params.slice(0, -2));
+<<<<<<< HEAD
     return paginated(res, rows.map(mapRow), parseInt(cr[0].count), page, limit);
+=======
+    return paginated(res, rows, parseInt(cr[0].count), page, limit);
+>>>>>>> 74bdae40403a954677e8982c8f8e21f835a4aec5
   } catch (err) { next(err); }
 };
 
@@ -119,7 +128,12 @@ const getById = async (req, res, next) => {
     );
 
     const { rows: thanhToan } = await db.query(`SELECT * FROM THANHTOAN WHERE MaHD = $1 ORDER BY NgayTT DESC`, [req.params.maHD]);
+<<<<<<< HEAD
     return success(res, { ...mapDetail(rows[0]), chiTiet: chiTiet.map(mapChiTiet), thanhToan: thanhToan[0] ? mapThanhToan(thanhToan[0]) : null });
+=======
+    const mapped = thanhToan.map((t) => ({ ...t, PhuongThuc: mapPayMethodOut(t.phuongthuc || t.PhuongThuc) }));
+    return success(res, { ...rows[0], chiTiet, thanhToan: mapped[0] || null });
+>>>>>>> 74bdae40403a954677e8982c8f8e21f835a4aec5
   } catch (err) { next(err); }
 };
 
