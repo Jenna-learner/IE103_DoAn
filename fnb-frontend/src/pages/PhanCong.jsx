@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  ChevronLeft, ChevronRight, Download, Filter, Plus, RefreshCw, Users, X,
+  CalendarDays, ChevronLeft, ChevronRight, Download, Filter, Plus, RefreshCw, Users, X,
 } from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
@@ -52,8 +52,8 @@ function fmtTime(value) {
 
 function normalizeShift(item = {}) {
   return {
-    id: item.MaCa || item.maca,
-    label: item.TenCa || item.tenca,
+    id: item.MaCa || item.maca || item.MaCL || item.macl,
+    label: item.TenCa || item.tenca || item.TenCL || item.tencl || '',
     time: `${fmtTime(item.GioBatDau || item.giobatdau)} – ${fmtTime(item.GioKetThuc || item.gioketthuc)}`,
   }
 }
@@ -68,7 +68,7 @@ function normalizeBranch(item = {}) {
 function normalizeEmployee(item = {}) {
   return {
     MaNV: item.MaNV || item.manv,
-    HoTen: item.HoTen || item.hoten,
+    HoTen: item.HoTen || item.hoten || '',
     MaCN: item.MaCN || item.macn || '',
     TenCN: item.TenCN || item.tencn || '',
     VaiTro: normalizeRole(item.VaiTro || item.vaitro),
@@ -79,7 +79,7 @@ function normalizeAssignment(item = {}) {
   return {
     MaPC: String(item.MaPC || item.mapc),
     MaNV: item.MaNV || item.manv,
-    HoTen: item.HoTen || item.hoten,
+    HoTen: item.HoTen || item.hoten || '',
     MaCN: item.MaCN || item.macn,
     TenCN: item.TenCN || item.tencn || '',
     NgayLam: String(item.NgayLam || item.ngaylam || item.Ngay || item.ngay).slice(0, 10),
@@ -194,7 +194,7 @@ export default function PhanCong() {
     records.filter((item) => {
       if (!employeeFilter.trim()) return true
       const q = employeeFilter.trim().toLowerCase()
-      return item.HoTen.toLowerCase().includes(q) || item.MaNV.toLowerCase().includes(q)
+      return (item.HoTen || '').toLowerCase().includes(q) || (item.MaNV || '').toLowerCase().includes(q)
     })
   ), [employeeFilter, records])
 

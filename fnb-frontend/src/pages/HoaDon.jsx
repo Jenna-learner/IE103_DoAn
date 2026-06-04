@@ -42,6 +42,29 @@ const STATUS_STYLE = {
 const STATUS_LABEL = { Completed: 'Hoàn thành', Pending: 'Đang xử lý', Cancelled: 'Đã huỷ' }
 const PAY_LABEL = { Cash: 'Tiền mặt', Card: 'Thẻ', 'E-Wallet': 'Ví điện tử', EWallet: 'Ví điện tử', BankTransfer: 'Chuyển khoản' }
 
+
+function normalizeBranch(item = {}) {
+  return {
+    MaCN: item.MaCN || item.macn,
+    TenCN: item.TenCN || item.tencn,
+  }
+}
+
+function normalizeOrder(item = {}) {
+  return {
+    MaHD: item.MaHD || item.mahd,
+    MaCN: item.MaCN || item.macn,
+    TenCN: item.TenCN || item.tencn || '—',
+    TenKH: item.TenKH || item.tenkh || null,
+    SDTKH: item.SDTKH || item.sdtkh || null,
+    NgayLap: item.NgayLap || item.ngaylap || '',
+    TongThanhToan: Number(item.TongThanhToan ?? item.tongthanhtoan ?? 0),
+    GiamGia: Number(item.GiamGia ?? item.giamgia ?? 0),
+    TrangThai: item.TrangThai || item.trangthai || 'Pending',
+    thanhToan: item.thanhToan || item.thanhtoan || null,
+  }
+}
+
 function fmtDateTime(iso) {
   return new Date(iso).toLocaleString('vi-VN', {
     day: '2-digit', month: '2-digit', year: 'numeric',
@@ -92,7 +115,7 @@ export default function HoaDon() {
       if (filterDate)   params.ngay      = filterDate
       if (filterBranch && showBranchFilter) params.maCN = filterBranch
       const data = await api.get('/hoa-don', { params })
-      setOrders(data.data || [])
+      setOrders((data.data || []).map(normalizeOrder))
     } catch {
       toast.error('Không tải được danh sách hóa đơn')
     } finally {
@@ -104,7 +127,7 @@ export default function HoaDon() {
     if (!showBranchFilter) return
     try {
       const data = await api.get('/chi-nhanh')
-      setBranches(data.data || [])
+      setBranches((data.data || []).map(normalizeBranch))
     } catch {
       toast.error('Không tải được danh sách chi nhánh')
     }
