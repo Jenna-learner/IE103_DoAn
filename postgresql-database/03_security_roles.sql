@@ -42,6 +42,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON CHITIET_HOADON TO role_cashier;
 GRANT SELECT, INSERT ON THANHTOAN       TO role_cashier;
 GRANT SELECT ON CHINHANH                TO role_cashier;
 GRANT SELECT ON NHANVIEN                TO role_cashier;
+GRANT SELECT ON CALAM, PHANCONG         TO role_cashier;
 GRANT SELECT ON v_HoaDonChiTiet         TO role_cashier;
 
 -- 2.3 role_warehouse_staff: quản lý kho
@@ -50,6 +51,7 @@ GRANT SELECT, INSERT, UPDATE ON PHIEUNHAP               TO role_warehouse_staff;
 GRANT SELECT, INSERT, UPDATE, DELETE ON CHITIET_PHIEUNHAP TO role_warehouse_staff;
 GRANT SELECT ON v_CanhBaoTonKho                         TO role_warehouse_staff;
 GRANT SELECT ON NHACUNGCAP                              TO role_warehouse_staff;
+GRANT SELECT ON CALAM, PHANCONG, NHANVIEN              TO role_warehouse_staff;
 
 -- 2.4 role_hr_staff: quản lý nhân sự
 GRANT SELECT ON NHANVIEN, BOPHAN, CALAM, PHANCONG, NHANVIEN_CHINHANH TO role_hr_staff;

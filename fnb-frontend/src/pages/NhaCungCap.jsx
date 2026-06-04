@@ -5,6 +5,11 @@ import clsx from 'clsx'
 
 import api from '../lib/api'
 
+const STATUS_OPTIONS = [
+  { value: 'Active', label: 'Hoạt động' },
+  { value: 'Inactive', label: 'Ngưng hoạt động' },
+]
+
 const EMPTY_FORM = {
   MaNCC: '',
   TenNCC: '',
@@ -39,7 +44,7 @@ export default function NhaCungCap() {
   const loadSuppliers = useCallback(async (showToast = false) => {
     setLoading(true)
     try {
-      const res = await api.get('/nha-cung-cap')
+      const res = await api.get('/nha-cung-cap', { params: { trangThai: 'all' } })
       setSuppliers((res.data || []).map(normalizeSupplier))
       if (showToast) toast.success('Đã làm mới danh sách nhà cung cấp')
     } catch (err) {
@@ -93,6 +98,13 @@ export default function NhaCungCap() {
 
   const handleSubmit = async () => {
     if (!validate()) return
+    if (editingId) {
+      const current = suppliers.find((item) => item.MaNCC === editingId)
+      if (current?.TrangThai === 'Active' && form.TrangThai === 'Inactive') {
+        const ok = window.confirm('Ngưng hoạt động nhà cung cấp có thể ảnh hưởng tới các phiếu nhập đang chờ xử lý. Bạn có chắc muốn tiếp tục?')
+        if (!ok) return
+      }
+    }
     setSaving(true)
     try {
       if (editingId) {
@@ -115,6 +127,7 @@ export default function NhaCungCap() {
   }
 
   const activeCount = suppliers.filter((item) => item.TrangThai === 'Active').length
+  const getStatusLabel = (status) => STATUS_OPTIONS.find((item) => item.value === status)?.label || status
 
   return (
     <div className="h-full flex flex-col gap-4 overflow-hidden">
@@ -128,8 +141,8 @@ export default function NhaCungCap() {
           <p className="text-xl font-bold text-green-600 mt-1">{activeCount}</p>
         </div>
         <div className="card">
-          <p className="text-xs text-gray-400">Nguồn dữ liệu</p>
-          <p className="text-sm font-semibold mt-2 text-brand-600">API backend</p>
+          <p className="text-xs text-gray-400">Nhà cung cấp tạm ngưng</p>
+          <p className="text-xl font-bold text-amber-600 mt-1">{suppliers.length - activeCount}</p>
         </div>
       </div>
 
@@ -183,8 +196,7 @@ export default function NhaCungCap() {
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Trạng thái</label>
               <select value={form.TrangThai} onChange={(e) => setForm((prev) => ({ ...prev, TrangThai: e.target.value }))} className="input text-sm">
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
+                {STATUS_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
             </div>
             <div className="md:col-span-2 xl:col-span-3">
@@ -227,7 +239,7 @@ export default function NhaCungCap() {
               <div className="col-span-2">
                 <p className="font-mono text-xs font-semibold text-gray-700">{item.MaNCC}</p>
                 <span className={clsx('inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold', item.TrangThai === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600')}>
-                  {item.TrangThai}
+                  {getStatusLabel(item.TrangThai)}
                 </span>
               </div>
               <div className="col-span-3 min-w-0">

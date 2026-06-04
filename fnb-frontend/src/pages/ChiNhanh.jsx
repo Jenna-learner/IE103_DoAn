@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Building2, Plus, RefreshCw, Search, MapPin, Phone, Mail, Layers3 } from 'lucide-react'
+import { Building2, Plus, RefreshCw, Search, MapPin, Phone, Mail } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 import api from '../lib/api'
+
+const STATUS_OPTIONS = [
+  { value: 'Active', label: 'Hoạt động' },
+  { value: 'Inactive', label: 'Ngưng hoạt động' },
+]
 
 const EMPTY_BRANCH = {
   MaCN: '',
@@ -12,12 +17,6 @@ const EMPTY_BRANCH = {
   SDT: '',
   Email: '',
   TrangThai: 'Active',
-}
-
-const EMPTY_DEPARTMENT = {
-  MaBP: '',
-  TenBP: '',
-  MoTa: '',
 }
 
 function normalizeBranch(item) {
@@ -48,8 +47,6 @@ export default function ChiNhanh() {
   const [showBranchForm, setShowBranchForm] = useState(false)
   const [editingId, setEditingId] = useState('')
   const [branchForm, setBranchForm] = useState(EMPTY_BRANCH)
-  const [departmentForm, setDepartmentForm] = useState(EMPTY_DEPARTMENT)
-  const [savingDepartment, setSavingDepartment] = useState(false)
 
   const loadData = useCallback(async (showToast = false) => {
     setLoading(true)
@@ -97,6 +94,13 @@ export default function ChiNhanh() {
   const handleBranchSubmit = async () => {
     if (!branchForm.MaCN && !editingId) return toast.error('Vui lòng nhập mã chi nhánh')
     if (!branchForm.TenCN) return toast.error('Vui lòng nhập tên chi nhánh')
+    if (editingId) {
+      const current = branches.find((item) => item.MaCN === editingId)
+      if (current?.TrangThai === 'Active' && branchForm.TrangThai === 'Inactive') {
+        const ok = window.confirm('Ngưng hoạt động chi nhánh có thể ảnh hưởng tới nhân sự, phân công ca, phiếu nhập và phiếu chi đang chờ xử lý. Bạn có chắc muốn tiếp tục?')
+        if (!ok) return
+      }
+    }
 
     setSaving(true)
     try {
@@ -120,26 +124,8 @@ export default function ChiNhanh() {
     }
   }
 
-  const handleDepartmentSubmit = async () => {
-    if (!departmentForm.MaBP || !departmentForm.TenBP) {
-      toast.error('Vui lòng nhập mã và tên bộ phận')
-      return
-    }
-
-    setSavingDepartment(true)
-    try {
-      const res = await api.post('/chi-nhanh/bo-phan', departmentForm)
-      toast.success(res.message || 'Đã thêm bộ phận')
-      await loadData()
-      setDepartmentForm(EMPTY_DEPARTMENT)
-    } catch (err) {
-      toast.error(err.message || 'Không thêm được bộ phận')
-    } finally {
-      setSavingDepartment(false)
-    }
-  }
-
   const activeBranches = branches.filter((item) => item.TrangThai === 'Active').length
+  const getStatusLabel = (status) => STATUS_OPTIONS.find((item) => item.value === status)?.label || status
 
   return (
     <div className="h-full flex flex-col gap-4 overflow-hidden">
@@ -189,8 +175,7 @@ export default function ChiNhanh() {
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Trạng thái</label>
               <select value={branchForm.TrangThai} onChange={(e) => setBranchForm((prev) => ({ ...prev, TrangThai: e.target.value }))} className="input text-sm">
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
+                {STATUS_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               </select>
             </div>
             <div className="md:col-span-2 xl:col-span-3">
@@ -249,7 +234,7 @@ export default function ChiNhanh() {
                 </div>
                 <div className="col-span-1">
                   <span className={clsx('inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold', item.TrangThai === 'Active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600')}>
-                    {item.TrangThai}
+                    {getStatusLabel(item.TrangThai)}
                   </span>
                 </div>
                 <div className="col-span-1 flex justify-end">
@@ -261,21 +246,6 @@ export default function ChiNhanh() {
         </div>
 
         <div className="space-y-4 overflow-y-auto">
-          <div className="card">
-            <div className="flex items-center gap-2 mb-3">
-              <Layers3 size={16} className="text-brand-500" />
-              <h3 className="font-semibold text-gray-800">Thêm bộ phận</h3>
-            </div>
-            <div className="space-y-3">
-              <input value={departmentForm.MaBP} onChange={(e) => setDepartmentForm((prev) => ({ ...prev, MaBP: e.target.value }))} placeholder="Mã bộ phận" className="input text-sm" />
-              <input value={departmentForm.TenBP} onChange={(e) => setDepartmentForm((prev) => ({ ...prev, TenBP: e.target.value }))} placeholder="Tên bộ phận" className="input text-sm" />
-              <input value={departmentForm.MoTa} onChange={(e) => setDepartmentForm((prev) => ({ ...prev, MoTa: e.target.value }))} placeholder="Mô tả ngắn" className="input text-sm" />
-              <button onClick={handleDepartmentSubmit} className="btn-primary w-full text-sm py-2" disabled={savingDepartment}>
-                {savingDepartment ? <><RefreshCw size={14} className="animate-spin" /> Đang lưu...</> : 'Lưu bộ phận'}
-              </button>
-            </div>
-          </div>
-
           <div className="card">
             <h3 className="font-semibold text-gray-800 mb-3">Danh sách bộ phận</h3>
             <div className="space-y-2">

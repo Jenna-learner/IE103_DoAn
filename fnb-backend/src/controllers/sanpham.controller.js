@@ -2,6 +2,9 @@ const db = require('../config/db');
 const { success, error, paginated } = require('../utils/response');
 
 const toDbStatus = (s) => {
+  if (s === 'Đang bán') return 'Available';
+  if (s === 'Ngừng bán') return 'Hidden';
+  if (s === 'Hết món') return 'OutOfStock';
   if (s === 'Active') return 'Available';
   if (s === 'Inactive') return 'Hidden';
   if (s === 'Out of stock') return 'OutOfStock';
@@ -9,10 +12,21 @@ const toDbStatus = (s) => {
 };
 
 const fromDbStatus = (s) => {
-  if (s === 'Available') return 'Active';
-  if (s === 'Hidden') return 'Inactive';
-  if (s === 'OutOfStock') return 'Out of stock';
+  if (s === 'Available') return 'Đang bán';
+  if (s === 'Hidden') return 'Ngừng bán';
+  if (s === 'OutOfStock') return 'Hết món';
   return s;
+};
+
+const validateRecipe = (congthuc = []) => {
+  const seen = new Set();
+  for (const item of congthuc) {
+    if (!item.MaNL) continue;
+    if (seen.has(item.MaNL)) return 'Không được chọn trùng nguyên liệu trong cùng một công thức.';
+    if (Number(item.SoLuongLuong) <= 0) return 'Định mức nguyên liệu phải lớn hơn 0.';
+    seen.add(item.MaNL);
+  }
+  return null;
 };
 
 const getAll = async (req, res, next) => {
@@ -73,6 +87,20 @@ const create = async (req, res, next) => {
   try {
     await client.query('BEGIN');
     const { MaSP, TenSP, MaLoai, GiaBan, TrangThai = 'Active', congthuc = [] } = req.body;
+    const recipeError = validateRecipe(congthuc);
+    if (recipeError) {
+      await client.query('ROLLBACK');
+      return error(res, recipeError, 400);
+    }
+
+    const { rows: duplicated } = await client.query(
+      `SELECT 1 FROM SANPHAM WHERE MaSP = $1 OR LOWER(TenSP) = LOWER($2) LIMIT 1`,
+      [MaSP, TenSP]
+    );
+    if (duplicated.length > 0) {
+      await client.query('ROLLBACK');
+      return error(res, 'Mã hoặc tên sản phẩm đã tồn tại. Vui lòng kiểm tra lại trước khi lưu.', 409);
+    }
 
     await client.query(
       `INSERT INTO SANPHAM (MaSP, TenSP, MaLoai, GiaBanMacDinh, TrangThai) VALUES ($1,$2,$3,$4,$5)`,
@@ -97,6 +125,20 @@ const update = async (req, res, next) => {
     await client.query('BEGIN');
     const { TenSP, MaLoai, GiaBan, TrangThai, congthuc } = req.body;
     const maSP = req.params.maSP;
+    const recipeError = validateRecipe(congthuc || []);
+    if (recipeError) {
+      await client.query('ROLLBACK');
+      return error(res, recipeError, 400);
+    }
+
+    const { rows: duplicated } = await client.query(
+      `SELECT 1 FROM SANPHAM WHERE LOWER(TenSP) = LOWER($1) AND MaSP <> $2 LIMIT 1`,
+      [TenSP, maSP]
+    );
+    if (duplicated.length > 0) {
+      await client.query('ROLLBACK');
+      return error(res, 'Tên sản phẩm đã tồn tại. Vui lòng dùng tên khác để tránh ghi đè dữ liệu vận hành.', 409);
+    }
 
     await client.query(
       `UPDATE SANPHAM SET TenSP=$1, MaLoai=$2, GiaBanMacDinh=$3, TrangThai=$4, UpdatedAt=NOW() WHERE MaSP=$5`,

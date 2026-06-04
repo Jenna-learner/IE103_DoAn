@@ -9,12 +9,18 @@ import clsx from 'clsx'
 import api from '../lib/api'
 import { fmtCurrency, fmtNumber } from '../lib/format'
 
+const PRODUCT_STATUS = [
+  { value: 'Đang bán', label: 'Đang bán' },
+  { value: 'Ngừng bán', label: 'Ngừng bán' },
+  { value: 'Hết món', label: 'Hết món' },
+]
+
 const EMPTY_FORM = {
   MaSP: '',
   TenSP: '',
   MaLoai: '',
   GiaBan: '',
-  TrangThai: 'Active',
+  TrangThai: 'Đang bán',
 }
 
 const EMPTY_RECIPE = { MaNL: '', SoLuongLuong: '' }
@@ -39,7 +45,7 @@ function normalizeProduct(item) {
     MaSP: item.MaSP || item.masp,
     TenSP: item.TenSP || item.tensp,
     GiaBan: Number(item.GiaBan ?? item.giaban ?? 0),
-    TrangThai: item.TrangThai || item.trangthai || 'Active',
+    TrangThai: item.TrangThai || item.trangthai || 'Đang bán',
     MaLoai: item.MaLoai || item.maloai,
     TenLoai: item.TenLoai || item.tenloai || '',
   }
@@ -77,7 +83,7 @@ function ProductRow({ item, detail, loadingDetail, onToggle, onEdit, onStatusCha
         <div className="col-span-2 text-xs text-gray-600">{item.TenLoai || '—'}</div>
         <div className="col-span-2 text-sm font-semibold text-gray-800">{fmtCurrency(item.GiaBan)}</div>
         <div className="col-span-2">
-          <span className={clsx('inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold', item.TrangThai === 'Active' ? 'bg-green-100 text-green-700' : item.TrangThai === 'Out of stock' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600')}>
+          <span className={clsx('inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold', item.TrangThai === 'Đang bán' ? 'bg-green-100 text-green-700' : item.TrangThai === 'Hết món' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600')}>
             {item.TrangThai}
           </span>
         </div>
@@ -95,13 +101,13 @@ function ProductRow({ item, detail, loadingDetail, onToggle, onEdit, onStatusCha
               <p className="text-[11px] text-gray-400 mt-1">Chi tiết dùng để xuất kho khi hóa đơn hoàn tất.</p>
             </div>
             <div className="flex items-center gap-2">
-              {['Active', 'Inactive', 'Out of stock'].map((status) => (
+              {PRODUCT_STATUS.map((status) => (
                 <button
-                  key={status}
-                  onClick={(e) => { e.stopPropagation(); onStatusChange(item.MaSP, status) }}
-                  className={clsx('text-xs px-2.5 py-1 rounded-lg border font-medium', item.TrangThai === status ? 'border-brand-300 bg-brand-50 text-brand-600' : 'border-gray-200 text-gray-500 hover:border-gray-300')}
+                  key={status.value}
+                  onClick={(e) => { e.stopPropagation(); onStatusChange(item.MaSP, status.value) }}
+                  className={clsx('text-xs px-2.5 py-1 rounded-lg border font-medium', item.TrangThai === status.value ? 'border-brand-300 bg-brand-50 text-brand-600' : 'border-gray-200 text-gray-500 hover:border-gray-300')}
                 >
-                  {status}
+                  {status.label}
                 </button>
               ))}
             </div>
@@ -241,6 +247,13 @@ export default function SanPham() {
     if (!form.MaLoai) return toast.error('Vui lòng chọn loại sản phẩm'), false
     if (Number(form.GiaBan) <= 0) return toast.error('Giá bán phải lớn hơn 0'), false
 
+    const recipeItems = recipe.filter((item) => item.MaNL)
+    const duplicated = new Set()
+    for (const item of recipeItems) {
+      if (duplicated.has(item.MaNL)) return toast.error('Không chọn trùng nguyên liệu trong cùng một công thức'), false
+      duplicated.add(item.MaNL)
+    }
+
     const validRecipe = recipe.every((item) => !item.MaNL || Number(item.SoLuongLuong) > 0)
     if (!validRecipe) return toast.error('Định mức nguyên liệu phải lớn hơn 0'), false
     return true
@@ -281,6 +294,11 @@ export default function SanPham() {
   }
 
   const handleStatusChange = async (maSP, TrangThai) => {
+    const target = products.find((item) => item.MaSP === maSP)
+    if (!target) return
+    if (target.TrangThai === TrangThai) return
+    const ok = window.confirm(`Đổi trạng thái sản phẩm "${target.TenSP}" sang "${TrangThai}"? Thay đổi này sẽ ảnh hưởng trực tiếp tới màn hình bán hàng.`)
+    if (!ok) return
     try {
       const res = await api.patch(`/san-pham/${maSP}/trang-thai`, { TrangThai })
       toast.success(res.message || 'Đã cập nhật trạng thái sản phẩm')
@@ -290,8 +308,8 @@ export default function SanPham() {
     }
   }
 
-  const activeCount = products.filter((item) => item.TrangThai === 'Active').length
-  const inactiveCount = products.filter((item) => item.TrangThai !== 'Active').length
+  const activeCount = products.filter((item) => item.TrangThai === 'Đang bán').length
+  const inactiveCount = products.filter((item) => item.TrangThai !== 'Đang bán').length
 
   return (
     <div className="h-full flex flex-col gap-4 overflow-hidden">
@@ -312,9 +330,7 @@ export default function SanPham() {
         </select>
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="input text-sm w-44">
           <option value="">Tất cả trạng thái</option>
-          <option value="Active">Active</option>
-          <option value="Inactive">Inactive</option>
-          <option value="Out of stock">Out of stock</option>
+          {PRODUCT_STATUS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select>
         <button onClick={() => loadData(true)} className="btn-secondary text-sm px-3 py-2" disabled={loading}><RefreshCw size={14} className={clsx(loading && 'animate-spin')} /> Làm mới</button>
         <button onClick={openCreate} className="btn-primary text-sm px-3 py-2"><Plus size={14} /> Thêm sản phẩm</button>
@@ -331,7 +347,7 @@ export default function SanPham() {
             <div><label className="block text-xs font-semibold text-gray-600 mb-1">Tên SP</label><input value={form.TenSP} onChange={(e) => setForm((p) => ({ ...p, TenSP: e.target.value }))} className="input text-sm" /></div>
             <div><label className="block text-xs font-semibold text-gray-600 mb-1">Loại SP</label><select value={form.MaLoai} onChange={(e) => setForm((p) => ({ ...p, MaLoai: e.target.value }))} className="input text-sm"><option value="">-- Chọn loại --</option>{categories.map((item) => <option key={item.MaLoai} value={item.MaLoai}>{item.TenLoai}</option>)}</select></div>
             <div><label className="block text-xs font-semibold text-gray-600 mb-1">Giá bán</label><input type="number" value={form.GiaBan} onChange={(e) => setForm((p) => ({ ...p, GiaBan: e.target.value }))} className="input text-sm" /></div>
-            <div><label className="block text-xs font-semibold text-gray-600 mb-1">Trạng thái</label><select value={form.TrangThai} onChange={(e) => setForm((p) => ({ ...p, TrangThai: e.target.value }))} className="input text-sm"><option value="Active">Active</option><option value="Inactive">Inactive</option><option value="Out of stock">Out of stock</option></select></div>
+            <div><label className="block text-xs font-semibold text-gray-600 mb-1">Trạng thái</label><select value={form.TrangThai} onChange={(e) => setForm((p) => ({ ...p, TrangThai: e.target.value }))} className="input text-sm">{PRODUCT_STATUS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
           </div>
 
           <div>

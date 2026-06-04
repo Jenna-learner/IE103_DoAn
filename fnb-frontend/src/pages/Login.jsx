@@ -163,11 +163,6 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Hint tài khoản */}
-          <div className="mt-8 p-3.5 bg-amber-50 border border-amber-100 rounded-lg space-y-1">
-            <p className="text-xs font-medium text-amber-800 mb-1.5">Đăng nhập bằng tài khoản đã có trong database.</p>
-            <p className="text-xs text-amber-700">Nếu bạn đã seed dữ liệu mẫu backend, có thể dùng tài khoản mặc định <span className="font-mono">admin@fnbchain.com / admin@123</span>.</p>
-          </div>
         </div>
       </div>
     </div>

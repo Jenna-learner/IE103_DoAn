@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  AlertTriangle, CalendarDays, CheckCircle2, ClipboardList, Database,
+  AlertTriangle, CalendarDays, CheckCircle2, ClipboardList,
   Package, Receipt, RefreshCw, ShoppingCart, Store, TrendingUp, Truck, Users,
 } from 'lucide-react'
 import {
@@ -13,6 +13,7 @@ import clsx from 'clsx'
 import api from '../lib/api'
 import useAuthStore from '../store/authStore'
 import { fmtCurrency, fmtNumber } from '../lib/format'
+import { exportExcel } from '../lib/exportExcel'
 import { MANAGER_ROLES, ROLE, ROLE_LABEL, normalizeRole } from '../lib/roles'
 
 function todayISO() {
@@ -49,6 +50,26 @@ function normalizeRevenuePoint(item = {}) {
     label: fmtDateShort(date),
     DoanhThuThuan: Number(item.DoanhThuThuan ?? item.doanhthuthuan ?? 0),
   }
+}
+
+function groupRevenueByDay(items = []) {
+  const map = new Map()
+
+  items.forEach((item) => {
+    const key = String(item.Ngay || item.ngay || '').slice(0, 10)
+    if (!key) return
+
+    const current = map.get(key) || {
+      Ngay: key,
+      label: fmtDateShort(key),
+      DoanhThuThuan: 0,
+    }
+
+    current.DoanhThuThuan += Number(item.DoanhThuThuan ?? item.doanhthuthuan ?? 0)
+    map.set(key, current)
+  })
+
+  return Array.from(map.values()).sort((a, b) => a.Ngay.localeCompare(b.Ngay))
 }
 
 function normalizeTopProduct(item = {}) {
@@ -201,7 +222,7 @@ export default function Dashboard() {
     ])
 
     setSummary(normalizeSummary(summaryRes.data))
-    setRevenueSeries((revenueRes.data || []).map(normalizeRevenuePoint))
+    setRevenueSeries(groupRevenueByDay((revenueRes.data || []).map(normalizeRevenuePoint)))
     setTopProducts((topRes.data || []).map(normalizeTopProduct))
     setLowStockItems((lowRes.data || []).map(normalizeLowStock).slice(0, 6))
   }, [month, selectedBranch])
@@ -238,6 +259,7 @@ export default function Dashboard() {
       }
 
       if (showToast) toast.success('Đã làm mới dashboard')
+      return true
     } catch (err) {
       toast.error(err.message || 'Không tải được dashboard')
       setSummary(normalizeSummary())
@@ -248,6 +270,7 @@ export default function Dashboard() {
       setOrders([])
       setPurchaseOrders([])
       setInventoryLogs([])
+      return false
     } finally {
       setLoading(false)
     }
@@ -270,14 +293,26 @@ export default function Dashboard() {
     return branches.find((item) => item.MaCN === selectedBranch)?.TenCN || 'Chi nhánh'
   }, [branches, selectedBranch, user?.tenCN])
 
-  const handleRefreshViews = async () => {
-    setRefreshingViews(true)
+  const handleRefreshDashboard = async () => {
+    const shouldRefreshViews = role === ROLE.ADMIN && isManagerDashboard
+
+    if (shouldRefreshViews) setRefreshingViews(true)
+
     try {
-      const res = await api.post('/bao-cao/lam-moi')
-      toast.success(res.message || 'Đã làm mới Materialized Views')
-      await loadDashboard(true)
+      if (shouldRefreshViews) {
+        await api.post('/bao-cao/lam-moi')
+      }
+
+      const ok = await loadDashboard(false)
+      if (ok) {
+        toast.success(
+          shouldRefreshViews
+            ? 'Đã đồng bộ và làm mới dữ liệu báo cáo'
+            : 'Đã làm mới dashboard'
+        )
+      }
     } catch (err) {
-      toast.error(err.message || 'Không làm mới được Materialized Views')
+      toast.error(err.message || 'Không làm mới được dữ liệu báo cáo')
     } finally {
       setRefreshingViews(false)
     }
@@ -344,16 +379,14 @@ export default function Dashboard() {
               </select>
             )}
 
-            <button onClick={() => loadDashboard(true)} className="btn-secondary text-sm px-3 py-2" disabled={loading}>
-              <RefreshCw size={14} className={clsx(loading && 'animate-spin')} /> Làm mới
+            <button
+              onClick={handleRefreshDashboard}
+              className="btn-secondary text-sm px-3 py-2"
+              disabled={loading || refreshingViews}
+            >
+              <RefreshCw size={14} className={clsx((loading || refreshingViews) && 'animate-spin')} />
+              {refreshingViews ? 'Đang làm mới dữ liệu báo cáo...' : 'Làm mới'}
             </button>
-
-            {role === ROLE.ADMIN && isManagerDashboard && (
-              <button onClick={handleRefreshViews} className="btn-primary text-sm px-3 py-2" disabled={refreshingViews}>
-                <Database size={14} />
-                {refreshingViews ? 'Đang refresh MV...' : 'Refresh Materialized Views'}
-              </button>
-            )}
           </div>
         </div>
 
@@ -378,11 +411,23 @@ export default function Dashboard() {
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div>
                     <h2 className="text-sm font-semibold text-gray-700">Doanh thu theo ngày</h2>
-                    <p className="text-xs text-gray-400 mt-1">Nguồn: Materialized View `mv_doanhthu_ngay` · Tháng {month}</p>
+                    <p className="text-xs text-gray-400 mt-1">Mỗi ngày hiển thị một cột doanh thu thuần · Tháng {month}</p>
                   </div>
-                  <div className="text-right text-xs text-gray-400">
-                    <p>Doanh thu thuần</p>
-                    <p className="font-semibold text-gray-700">{fmtCurrency(revenueSeries.reduce((sum, item) => sum + item.DoanhThuThuan, 0))}</p>
+                  <div className="flex items-center gap-2">
+                    <div className="text-right text-xs text-gray-400">
+                      <p>Doanh thu thuần</p>
+                      <p className="font-semibold text-gray-700">{fmtCurrency(revenueSeries.reduce((sum, item) => sum + item.DoanhThuThuan, 0))}</p>
+                    </div>
+                    <button
+                      onClick={() => exportExcel(`doanh-thu-${month}`, 'Doanh thu theo ngày', [
+                        { label: 'Ngày', value: 'Ngay' },
+                        { label: 'Doanh thu thuần', value: (row) => row.DoanhThuThuan },
+                      ], revenueSeries)}
+                      className="btn-secondary px-3 py-2 text-xs"
+                      disabled={revenueSeries.length === 0}
+                    >
+                      Xuất báo cáo
+                    </button>
                   </div>
                 </div>
 
@@ -393,7 +438,7 @@ export default function Dashboard() {
                     <EmptyState icon={<TrendingUp size={28} className="opacity-30" />} message={`Chưa có dữ liệu doanh thu trong tháng ${month}`} />
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={revenueSeries} margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
+                      <BarChart data={revenueSeries} barCategoryGap="24%" margin={{ top: 8, right: 8, left: 0, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                         <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                         <YAxis
@@ -407,7 +452,7 @@ export default function Dashboard() {
                           labelFormatter={(_, payload) => payload?.[0]?.payload?.Ngay || ''}
                           contentStyle={{ borderRadius: 12, borderColor: '#e5e7eb' }}
                         />
-                        <Bar dataKey="DoanhThuThuan" fill="#f97316" radius={[8, 8, 0, 0]} />
+                        <Bar dataKey="DoanhThuThuan" fill="#f97316" radius={[8, 8, 0, 0]} maxBarSize={28} />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
@@ -415,8 +460,24 @@ export default function Dashboard() {
               </div>
 
               <div className="card">
-                <h2 className="text-sm font-semibold text-gray-700 mb-3">Top sản phẩm bán chạy</h2>
-                <p className="text-xs text-gray-400 mb-3">Nguồn: Materialized View `mv_top_sanpham`</p>
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div>
+                    <h2 className="text-sm font-semibold text-gray-700">Top sản phẩm bán chạy</h2>
+                    <p className="text-xs text-gray-400 mt-1">Top 5 theo số lượng bán trong phạm vi đang chọn</p>
+                  </div>
+                  <button
+                    onClick={() => exportExcel(`top-san-pham-${month}`, 'Top sản phẩm', [
+                      { label: 'Mã sản phẩm', value: 'MaSP' },
+                      { label: 'Tên sản phẩm', value: 'TenSP' },
+                      { label: 'Số lượng bán', value: 'TongSoLuongBan' },
+                      { label: 'Doanh thu', value: 'TongDoanhThu' },
+                    ], topProducts)}
+                    className="btn-secondary px-3 py-2 text-xs"
+                    disabled={topProducts.length === 0}
+                  >
+                    Xuất báo cáo
+                  </button>
+                </div>
 
                 {topProducts.length === 0 ? (
                   <EmptyState icon={<Store size={26} className="opacity-30" />} message="Chưa có dữ liệu bán hàng" />
@@ -580,13 +641,29 @@ export default function Dashboard() {
             <div className="flex items-center justify-between gap-3 mb-4">
               <div>
                 <h2 className="text-sm font-semibold text-gray-700">Cảnh báo tồn kho thời gian thực</h2>
-                <p className="text-xs text-gray-400 mt-1">Nguồn: View `v_CanhBaoTonKho`</p>
+                <p className="text-xs text-gray-400 mt-1">Danh sách nguyên liệu đang thấp hơn mức tối thiểu</p>
               </div>
-              {lowStockItems.length === 0 && (
-                <div className="flex items-center gap-2 text-green-600 text-xs font-medium">
-                  <CheckCircle2 size={14} /> Không có cảnh báo tồn kho
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                {lowStockItems.length === 0 && (
+                  <div className="flex items-center gap-2 text-green-600 text-xs font-medium">
+                    <CheckCircle2 size={14} /> Không có cảnh báo tồn kho
+                  </div>
+                )}
+                <button
+                  onClick={() => exportExcel(`canh-bao-ton-kho-${month}`, 'Cảnh báo tồn kho', [
+                    { label: 'Mã nguyên liệu', value: 'MaNL' },
+                    { label: 'Tên nguyên liệu', value: 'TenNL' },
+                    { label: 'Chi nhánh', value: 'TenCN' },
+                    { label: 'Đơn vị tính', value: 'DonViTinh' },
+                    { label: 'Tồn hiện tại', value: 'SoLuongTon' },
+                    { label: 'Mức tối thiểu', value: 'TonToiThieu' },
+                  ], lowStockItems)}
+                  className="btn-secondary px-3 py-2 text-xs"
+                  disabled={lowStockItems.length === 0}
+                >
+                  Xuất báo cáo
+                </button>
+              </div>
             </div>
 
             {lowStockItems.length > 0 && (

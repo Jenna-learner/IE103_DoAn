@@ -9,6 +9,5 @@ router.get('/',                           ctrl.getAll);
 router.get('/:maNV',                      ctrl.getById);
 router.post('/',                          authorize('admin'), ctrl.create);
 router.put('/:maNV',                      authorize('admin', 'quan_ly_chinhanh'), ctrl.update);
-router.patch('/:maNV/dat-lai-mat-khau',   authorize('admin'), ctrl.datLaiMatKhau);
 
 module.exports = router;

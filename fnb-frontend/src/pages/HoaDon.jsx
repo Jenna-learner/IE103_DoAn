@@ -12,13 +12,14 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Search, RefreshCw, TrendingUp, ShoppingBag,
-  XCircle, ChevronLeft, ChevronRight, ChevronRight as ArrowRow,
+  Download, Search, RefreshCw, TrendingUp, ShoppingBag,
+  XCircle, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 import api from '../lib/api'
+import { exportExcel } from '../lib/exportExcel'
 import { fmtCurrency } from '../lib/format'
 import { useAuthStore } from '../store/authStore'
 import { ROLE } from '../lib/roles'
@@ -39,7 +40,7 @@ const STATUS_STYLE = {
   Cancelled: 'bg-red-100 text-red-600',
 }
 const STATUS_LABEL = { Completed: 'Hoàn thành', Pending: 'Đang xử lý', Cancelled: 'Đã huỷ' }
-const PAY_ICON = { Cash: '💵', Card: '💳', 'E-Wallet': '📱', EWallet: '📱', BankTransfer: '🏦' }
+const PAY_LABEL = { Cash: 'Tiền mặt', Card: 'Thẻ', 'E-Wallet': 'Ví điện tử', EWallet: 'Ví điện tử', BankTransfer: 'Chuyển khoản' }
 
 function fmtDateTime(iso) {
   return new Date(iso).toLocaleString('vi-VN', {
@@ -219,6 +220,25 @@ export default function HoaDon() {
             Đặt lại
           </button>
         )}
+
+        <button
+          onClick={() => exportExcel('hoa-don', 'Hoa don', [
+            { label: 'Mã hóa đơn', value: 'MaHD' },
+            { label: 'Chi nhánh', value: 'TenCN' },
+            { label: 'Khách hàng', value: (row) => row.TenKH || 'Khách vãng lai' },
+            { label: 'SĐT', value: (row) => row.SDTKH || '' },
+            { label: 'Thời gian', value: 'NgayLap' },
+            { label: 'Thanh toán', value: (row) => PAY_LABEL[row.thanhToan?.PhuongThuc] || '' },
+            { label: 'Tổng tiền', value: 'TongThanhToan' },
+            { label: 'Giảm giá', value: 'GiamGia' },
+            { label: 'Trạng thái', value: (row) => STATUS_LABEL[row.TrangThai] || row.TrangThai },
+          ], filtered)}
+          className="btn-secondary px-3 py-2 text-sm"
+          disabled={filtered.length === 0}
+        >
+          <Download size={14} />
+          Xuất báo cáo
+        </button>
       </div>
 
       {/* Bảng */}
@@ -281,8 +301,8 @@ export default function HoaDon() {
               </div>
 
               {/* Phương thức */}
-              <div className="col-span-1 text-center text-base">
-                {order.thanhToan ? (PAY_ICON[order.thanhToan.PhuongThuc] || '—') : '—'}
+              <div className="col-span-1 text-center text-[11px] text-gray-500">
+                {order.thanhToan ? (PAY_LABEL[order.thanhToan.PhuongThuc] || '—') : '—'}
               </div>
 
               {/* Tổng tiền */}

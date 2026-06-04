@@ -12,6 +12,5 @@ router.put('/:maCN',         authorize('admin'), ctrl.updateCN);
 
 // Bộ phận
 router.get('/bo-phan',       ctrl.getAllBP);
-router.post('/bo-phan',      authorize('admin'), ctrl.createBP);
 
 module.exports = router;
