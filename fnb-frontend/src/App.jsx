@@ -42,6 +42,7 @@ import ComingSoon     from './pages/ComingSoon'
 import { ALL_ROLES, ROLE, ROLE_HOME, SALES_ROLES, normalizeRole } from './lib/roles'
 
 const ADMIN = [ROLE.ADMIN]
+const SUPPLIER_VIEW = [ROLE.ADMIN, ROLE.BRANCH_MANAGER, ROLE.WAREHOUSE]
 const EMPLOYEE_VIEW = ALL_ROLES
 const INVENTORY_VIEW = ALL_ROLES
 const INVENTORY_EDIT = [ROLE.ADMIN, ROLE.BRANCH_MANAGER, ROLE.WAREHOUSE]
@@ -108,7 +109,7 @@ export default function App() {
           <Route path="phieu-nhap" element={<ProtectedRoute roles={PROCUREMENT_VIEW}><PhieuNhap /></ProtectedRoute>} />
           <Route path="phan-cong"  element={<ProtectedRoute roles={EMPLOYEE_VIEW}><PhanCong /></ProtectedRoute>} />
           <Route path="phieu-chi"  element={<ProtectedRoute roles={ALL_ROLES}><PhieuChi /></ProtectedRoute>} />
-          <Route path="nha-cung-cap" element={<ProtectedRoute roles={ADMIN}><NhaCungCap /></ProtectedRoute>} />
+          <Route path="nha-cung-cap" element={<ProtectedRoute roles={SUPPLIER_VIEW}><NhaCungCap /></ProtectedRoute>} />
 
           {/* Quản trị dữ liệu */}
           <Route path="san-pham"   element={<ProtectedRoute roles={PRODUCT_VIEW}><SanPham /></ProtectedRoute>} />

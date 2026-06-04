@@ -8,6 +8,8 @@ import clsx from 'clsx'
 
 import api from '../lib/api'
 import { fmtCurrency, fmtNumber } from '../lib/format'
+import useAuthStore from '../store/authStore'
+import { ROLE, normalizeRole } from '../lib/roles'
 
 const PRODUCT_STATUS = [
   { value: 'Đang bán', label: 'Đang bán' },
@@ -143,6 +145,9 @@ function ProductRow({ item, detail, loadingDetail, onToggle, onEdit, onStatusCha
 }
 
 export default function SanPham() {
+  const user = useAuthStore((s) => s.user)
+  const canCreate = normalizeRole(user?.vaiTro) === ROLE.ADMIN
+
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
   const [ingredients, setIngredients] = useState([])
@@ -333,7 +338,9 @@ export default function SanPham() {
           {PRODUCT_STATUS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select>
         <button onClick={() => loadData(true)} className="btn-secondary text-sm px-3 py-2" disabled={loading}><RefreshCw size={14} className={clsx(loading && 'animate-spin')} /> Làm mới</button>
-        <button onClick={openCreate} className="btn-primary text-sm px-3 py-2"><Plus size={14} /> Thêm sản phẩm</button>
+        {canCreate && (
+          <button onClick={openCreate} className="btn-primary text-sm px-3 py-2"><Plus size={14} /> Thêm sản phẩm</button>
+        )}
       </div>
 
       {showForm && (

@@ -98,13 +98,15 @@ const create = async (req, res, next) => {
 
     const MaKH = genMa('KH');
     await db.query(`INSERT INTO KHACHHANG (MaKH, HoTen, SDT, Email) VALUES ($1,$2,$3,$4)`, [MaKH, TenKH, SDT, Email]);
-    return success(res, { MaKH, TenKH, SDT, HangThanhVien: 'Bronze', DiemTichLuy: 0 }, 'Đăng ký khách hàng thành công', 201);
+    return success(res, { MaKH, TenKH, SDT, HangThanhVien: 'Đồng', DiemTichLuy: 0 }, 'Đăng ký khách hàng thành công', 201);
   } catch (err) { next(err); }
 };
 
 const update = async (req, res, next) => {
   try {
-    const { TenKH, Email, DiemTichLuy, HangThanhVien } = req.body;
+    // Chỉ cho phép cập nhật TenKH và Email.
+    // DiemTichLuy và HangThanhVien do hệ thống tự tính — không role nào được chỉnh thủ công.
+    const { TenKH, Email } = req.body;
 
     const { rows: duplicated } = await db.query(
       `SELECT 1
@@ -118,19 +120,10 @@ const update = async (req, res, next) => {
       return error(res, 'Email khách hàng đã tồn tại.', 409);
     }
 
-    const fields = ['HoTen = $1', 'Email = $2', 'UpdatedAt = NOW()'];
-    const params = [TenKH, Email, req.params.maKH];
-
-    if (DiemTichLuy !== undefined) {
-      fields.splice(fields.length - 1, 0, `DiemTichLuy = $${params.length + 1}`);
-      params.push(Number(DiemTichLuy));
-    }
-    if (HangThanhVien) {
-      fields.splice(fields.length - 1, 0, `HangThanhVien = $${params.length + 1}`);
-      params.push(HangThanhVien);
-    }
-
-    await db.query(`UPDATE KHACHHANG SET ${fields.join(', ')} WHERE MaKH=$3`, params);
+    await db.query(
+      `UPDATE KHACHHANG SET HoTen = $1, Email = $2, UpdatedAt = NOW() WHERE MaKH = $3`,
+      [TenKH, Email || null, req.params.maKH]
+    );
     return success(res, null, 'Cập nhật thông tin khách hàng thành công');
   } catch (err) { next(err); }
 };

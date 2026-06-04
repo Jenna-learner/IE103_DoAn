@@ -76,6 +76,7 @@ const MENU = {
     ]},
     { group: 'Danh mục',    items: [
         { to: '/san-pham',           icon: Coffee,        label: 'Sản phẩm' },
+        { to: '/nha-cung-cap',       icon: Factory,       label: 'Nhà cung cấp' },
     ]},
   ],
   [ROLE.CASHIER]: [
@@ -88,7 +89,6 @@ const MENU = {
     ]},
     { group: 'Tham khảo kho', items: [
         { to: '/kho/ton-kho',        icon: Package,       label: 'Tồn kho' },
-        { to: '/kho/kiem-kho',       icon: ScanLine,      label: 'Kiểm kho' },
         { to: '/phan-cong',          icon: CalendarDays,  label: 'Phân công ca' },
     ]},
   ],
@@ -101,6 +101,7 @@ const MENU = {
         { to: '/phieu-nhap',         icon: Truck,         label: 'Phiếu nhập hàng' },
         { to: '/phieu-chi',          icon: Receipt,       label: 'Phiếu chi' },
         { to: '/phan-cong',          icon: CalendarDays,  label: 'Phân công ca' },
+        { to: '/nha-cung-cap',       icon: Factory,       label: 'Nhà cung cấp' },
     ]},
   ],
 }
