@@ -103,9 +103,9 @@ export default function KhachHangModal({ customer, mode: initMode, onClose, onSa
                   {mem.icon}
                 </div>
                 <div className="flex-1">
-                  <p className="font-bold text-gray-800 text-lg leading-tight">{customer.TenKH}</p>
+                  <p className="font-bold text-gray-800 text-lg leading-tight">{customer?.TenKH || '—'}</p>
                   <p className="text-sm text-gray-400 flex items-center gap-1 mt-0.5">
-                    <Phone size={12} /> {customer.SDT}
+                    <Phone size={12} /> {customer?.SDT || '—'}
                   </p>
                   <span className={clsx('inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-semibold border', mem.cls)}>
                     {mem.icon} {mem.label}
@@ -117,24 +117,24 @@ export default function KhachHangModal({ customer, mode: initMode, onClose, onSa
               <div className="grid grid-cols-3 gap-3">
                 <div className="bg-amber-50 rounded-xl p-3 text-center">
                   <Star size={14} className="text-amber-500 mx-auto mb-1" />
-                  <p className="text-lg font-bold text-gray-800">{customer.DiemTichLuy?.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-gray-800">{Number(customer?.DiemTichLuy || 0).toLocaleString()}</p>
                   <p className="text-[11px] text-gray-400">Điểm tích lũy</p>
                 </div>
                 <div className="bg-blue-50 rounded-xl p-3 text-center">
                   <ShoppingBag size={14} className="text-blue-500 mx-auto mb-1" />
-                  <p className="text-lg font-bold text-gray-800">{customer.TongDonHang || 0}</p>
+                  <p className="text-lg font-bold text-gray-800">{customer?.TongDonHang || 0}</p>
                   <p className="text-[11px] text-gray-400">Đơn hàng</p>
                 </div>
                 <div className="bg-green-50 rounded-xl p-3 text-center">
                   <Award size={14} className="text-green-500 mx-auto mb-1" />
-                  <p className="text-sm font-bold text-gray-800">{fmtCurrency(customer.TongChiTieu || 0)}</p>
+                  <p className="text-sm font-bold text-gray-800">{fmtCurrency(customer?.TongChiTieu || 0)}</p>
                   <p className="text-[11px] text-gray-400">Tổng chi tiêu</p>
                 </div>
               </div>
 
               {/* Ngày tham gia */}
               <div className="text-xs text-gray-400 text-center">
-                Tham gia từ {fmtDate(customer.NgayThamGia)}
+                Tham gia từ {fmtDate(customer?.NgayThamGia)}
               </div>
 
               {/* Lịch sử mua hàng gần đây */}
@@ -147,21 +147,21 @@ export default function KhachHangModal({ customer, mode: initMode, onClose, onSa
                     {orderHistory.slice(0, 4).map(o => (
                       <div key={o.MaHD} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
                         <div>
-                          <p className="text-xs font-mono font-semibold text-gray-700">{o.MaHD}</p>
+                          <p className="text-xs font-mono font-semibold text-gray-700">{o.MaHD || o.mahd}</p>
                           <p className="text-[11px] text-gray-400">
-                            {new Date(o.NgayLap).toLocaleDateString('vi-VN')}
+                            {new Date(o.NgayLap || o.ngaylap).toLocaleDateString('vi-VN')}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-xs font-semibold text-gray-800">{fmtCurrency(o.TongThanhToan)}</p>
+                          <p className="text-xs font-semibold text-gray-800">{fmtCurrency(o.TongThanhToan ?? o.tongthanhtoan ?? 0)}</p>
                           <span className={clsx(
                             'text-[10px] font-semibold px-1.5 py-0.5 rounded-full',
-                            o.TrangThai === 'Completed' ? 'bg-green-100 text-green-700' :
-                            o.TrangThai === 'Cancelled' ? 'bg-red-100 text-red-600' :
+                            (o.TrangThai || o.trangthai) === 'Completed' ? 'bg-green-100 text-green-700' :
+                            (o.TrangThai || o.trangthai) === 'Cancelled' ? 'bg-red-100 text-red-600' :
                             'bg-yellow-100 text-yellow-700'
                           )}>
-                            {o.TrangThai === 'Completed' ? 'Hoàn thành' :
-                             o.TrangThai === 'Cancelled' ? 'Đã huỷ' : 'Đang xử lý'}
+                            {(o.TrangThai || o.trangthai) === 'Completed' ? 'Hoàn thành' :
+                             (o.TrangThai || o.trangthai) === 'Cancelled' ? 'Đã huỷ' : 'Đang xử lý'}
                           </span>
                         </div>
                       </div>

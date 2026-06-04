@@ -36,6 +36,8 @@ function fmtDateTime(iso) {
 
 function normalizeTonKhoItem(item) {
   return {
+    MaCN: item.MaCN || item.macn,
+    TenCN: item.TenCN || item.tencn,
     MaNL: item.MaNL || item.manl,
     TenNL: item.TenNL || item.tennl,
     DonViTinh: item.DonViTinh || item.donvitinh,
@@ -303,7 +305,7 @@ export default function TonKho() {
               const isWarn = item.SoLuongTon <= item.TonToiThieu
               return (
                 <div
-                  key={item.MaNL}
+                  key={`${item.MaCN || 'ALL'}_${item.MaNL}`}
                   className={clsx(
                     'grid grid-cols-12 gap-2 px-4 py-3 items-center text-sm transition-colors',
                     isWarn

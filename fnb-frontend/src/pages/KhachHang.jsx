@@ -37,6 +37,31 @@ const HANG_FILTER = [
   { value: 'Platinum', label: '💎 Platinum'  },
 ]
 
+
+function normalizeCustomer(item = {}) {
+  return {
+    MaKH: item.MaKH || item.makh,
+    TenKH: item.TenKH || item.tenkh || '',
+    SDT: item.SDT || item.sdt || '',
+    Email: item.Email || item.email || '',
+    HangThanhVien: item.HangThanhVien || item.hangthanhvien || 'Bronze',
+    DiemTichLuy: Number(item.DiemTichLuy ?? item.diemtichluy ?? 0),
+    TongDonHang: Number(item.TongDonHang ?? item.tongdonhang ?? 0),
+    TongChiTieu: Number(item.TongChiTieu ?? item.tongchitieu ?? 0),
+    NgayThamGia: item.NgayThamGia || item.ngaythamgia || item.CreatedAt || item.createdat || '',
+  }
+}
+
+function normalizeOrder(item = {}) {
+  return {
+    MaHD: item.MaHD || item.mahd,
+    MaKH: item.MaKH || item.makh,
+    NgayLap: item.NgayLap || item.ngaylap || '',
+    TongThanhToan: Number(item.TongThanhToan ?? item.tongthanhtoan ?? 0),
+    TrangThai: item.TrangThai || item.trangthai || 'Pending',
+  }
+}
+
 function fmtDate(str) {
   if (!str) return '—'
   return new Date(str).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -79,8 +104,8 @@ export default function KhachHang() {
         api.get('/khach-hang', { params: { page: 1, limit: 500 } }),
         api.get('/hoa-don', { params: { page: 1, limit: 500 } }),
       ])
-      setCustomers(customerRes.data || [])
-      setOrders(orderRes.data || [])
+      setCustomers((customerRes.data || []).map(normalizeCustomer))
+      setOrders((orderRes.data || []).map(normalizeOrder))
     } catch {
       toast.error('Không tải được danh sách khách hàng')
     } finally {
