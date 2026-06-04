@@ -164,7 +164,6 @@ const create = async (req, res, next) => {
       );
     }
 
-    await client.query(`UPDATE HOADON SET TrangThai = 'Completed', UpdatedAt=NOW() WHERE MaHD = $1`, [MaHD]);
     const { rows: hdRow } = await client.query(`SELECT TongTienHang, GiamGia, TongThanhToan FROM HOADON WHERE MaHD = $1`, [MaHD]);
 
     const MaTT = genMa('TT');
