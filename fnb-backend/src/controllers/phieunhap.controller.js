@@ -73,6 +73,19 @@ const create = async (req, res, next) => {
     const MaPN = genMa('PN');
     const maCN = MaCN || req.user.maCN;
 
+    if (!maCN) {
+      await client.query('ROLLBACK');
+      return error(res, 'Tài khoản chưa được gán chi nhánh. Vui lòng chọn chi nhánh hoặc cập nhật dữ liệu nhân viên.', 400);
+    }
+    if (!canAccessBranchData(req.user, maCN)) {
+      await client.query('ROLLBACK');
+      return error(res, 'Bạn không có quyền tạo phiếu nhập cho chi nhánh khác.', 403);
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      await client.query('ROLLBACK');
+      return error(res, 'Phiếu nhập phải có ít nhất 1 dòng nguyên liệu.', 400);
+    }
+
     await client.query(
       `INSERT INTO PHIEUNHAP (MaPN, MaCN, MaNCC, MaNVLap, NgayNhap, TrangThai, GhiChu)
        VALUES ($1,$2,$3,$4,$5,'Draft',$6)`,

@@ -57,6 +57,13 @@ function normalizeIngredient(item) {
   }
 }
 
+function normalizeBranch(item) {
+  return {
+    MaCN: item.MaCN || item.macn,
+    TenCN: item.TenCN || item.tencn,
+  }
+}
+
 function normalizeChiTiet(item) {
   return {
     MaNL: item.MaNL || item.manl,
@@ -209,10 +216,12 @@ export default function PhieuNhap() {
   const canCreate = [ROLE.ADMIN, ROLE.BRANCH_MANAGER, ROLE.WAREHOUSE].includes(role)
   const canApprove = [ROLE.ADMIN, ROLE.OPS_DIRECTOR, ROLE.BRANCH_MANAGER].includes(role)
   const canCancel = [ROLE.ADMIN, ROLE.BRANCH_MANAGER, ROLE.WAREHOUSE].includes(role)
+  const canPickBranch = [ROLE.ADMIN, ROLE.OPS_DIRECTOR].includes(role)
 
   const [phieuList, setPhieuList] = useState([])
   const [suppliers, setSuppliers] = useState([])
   const [ingredients, setIngredients] = useState([])
+  const [branches, setBranches] = useState([])
   const [showForm, setShowForm] = useState(false)
   const [search, setSearch] = useState('')
   const [filterSt, setFilterSt] = useState('')
@@ -220,6 +229,7 @@ export default function PhieuNhap() {
   const [saving, setSaving] = useState(false)
   const [actionKey, setActionKey] = useState('')
 
+  const [maCN, setMaCN] = useState(user?.maCN || '')
   const [maNCC, setMaNCC] = useState('')
   const [ngay, setNgay] = useState('')
   const [ghiChu, setGhiChu] = useState('')
@@ -231,6 +241,7 @@ export default function PhieuNhap() {
   )
 
   const resetForm = () => {
+    setMaCN(user?.maCN || '')
     setMaNCC('')
     setNgay('')
     setGhiChu('')
@@ -240,11 +251,14 @@ export default function PhieuNhap() {
   const loadData = useCallback(async (showToast = false) => {
     setLoading(true)
     try {
-      const [listRes, supplierRes, ingredientRes] = await Promise.all([
+      const requests = [
         api.get('/phieu-nhap'),
         api.get('/nha-cung-cap'),
         api.get('/kho/nguyen-lieu'),
-      ])
+      ]
+      if (canPickBranch) requests.push(api.get('/chi-nhanh'))
+
+      const [listRes, supplierRes, ingredientRes, branchRes] = await Promise.all(requests)
 
       const baseList = (listRes.data || []).map(normalizePhieu)
       const detailResults = await Promise.all(
@@ -261,6 +275,7 @@ export default function PhieuNhap() {
       setPhieuList(detailResults)
       setSuppliers((supplierRes.data || []).map(normalizeNCC))
       setIngredients((ingredientRes.data || []).map(normalizeIngredient))
+      setBranches(canPickBranch ? (branchRes?.data || []).map(normalizeBranch) : [])
 
       if (showToast) toast.success('Đã làm mới danh sách phiếu nhập')
     } catch (err) {
@@ -268,7 +283,7 @@ export default function PhieuNhap() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [canPickBranch])
 
   useEffect(() => {
     loadData()
@@ -300,6 +315,10 @@ export default function PhieuNhap() {
   }
 
   const validate = () => {
+    if (canPickBranch && !maCN) {
+      toast.error('Vui lòng chọn chi nhánh')
+      return false
+    }
     if (!maNCC) {
       toast.error('Vui lòng chọn nhà cung cấp')
       return false
@@ -347,6 +366,7 @@ export default function PhieuNhap() {
     setSaving(true)
     try {
       const res = await api.post('/phieu-nhap', {
+        ...(canPickBranch ? { MaCN: maCN } : {}),
         MaNCC: maNCC,
         NgayNhap: ngay,
         GhiChu: ghiChu,
@@ -460,7 +480,21 @@ export default function PhieuNhap() {
             <button onClick={() => { setShowForm(false); resetForm() }} className="text-xs text-gray-400 hover:text-gray-600">✕ Đóng</button>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+            {canPickBranch && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">
+                  Chi nhánh <span className="text-red-500">*</span>
+                </label>
+                <select value={maCN} onChange={(e) => setMaCN(e.target.value)} className="input text-sm w-full">
+                  <option value="">-- Chọn chi nhánh --</option>
+                  {branches.map((branch) => (
+                    <option key={branch.MaCN} value={branch.MaCN}>{branch.TenCN}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">
                 Nhà cung cấp <span className="text-red-500">*</span>

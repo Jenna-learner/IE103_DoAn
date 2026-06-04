@@ -142,6 +142,9 @@ const create = async (req, res, next) => {
     const maCN = MaCN || req.user.maCN;
     const MaHD = genMa('HD');
 
+    if (!maCN) return error(res, 'Vui lòng chọn chi nhánh để tạo hóa đơn.', 400);
+    if (!canAccessBranchData(req.user, maCN)) return error(res, 'Bạn không có quyền tạo hóa đơn cho chi nhánh khác.', 403);
+
     let tongTienHang = 0;
     const enriched = [];
     for (const item of items) {
@@ -182,6 +185,10 @@ const create = async (req, res, next) => {
        VALUES ($1,$2,$3,$4,'Success')`,
       [MaTT, MaHD, mapPayMethod(phuongThuc), hdRow[0].tongthanhtoan]
     );
+
+    if (MaKH) {
+      await client.query(`CALL sp_UpdateCustomerLoyalty($1)`, [MaHD]);
+    }
 
     await client.query('COMMIT');
 

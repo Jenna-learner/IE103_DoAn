@@ -1,5 +1,7 @@
 const db = require('../config/db');
-const { success } = require('../utils/response');
+const { success, error } = require('../utils/response');
+
+const canAccessBranchData = (user, maCN) => ['admin', 'giam_doc_van_hanh'].includes(user.vaiTro) || (user.maCN && user.maCN === maCN);
 
 const getTonKho = async (req, res, next) => {
   try {
@@ -76,6 +78,8 @@ const capNhatMucToiThieu = async (req, res, next) => {
   try {
     const { MaCN, MaNL, TonToiThieu } = req.body;
     const maCN = MaCN || req.user.maCN;
+    if (!maCN) return error(res, 'Vui lòng chọn chi nhánh.', 400);
+    if (!canAccessBranchData(req.user, maCN)) return error(res, 'Bạn không có quyền cập nhật tồn kho cho chi nhánh khác.', 403);
     await db.queryCtx(req, `UPDATE TONKHO_CHINHANH SET TonToiThieu = $1, UpdatedAt=NOW() WHERE MaCN = $2 AND MaNL = $3`, [TonToiThieu, maCN, MaNL]);
     return success(res, null, 'Cập nhật mức tồn tối thiểu thành công');
   } catch (err) { next(err); }
@@ -87,6 +91,14 @@ const kiemKho = async (req, res, next) => {
     await client.query('BEGIN');
     const { MaCN, items } = req.body;
     const maCN = MaCN || req.user.maCN;
+    if (!maCN) {
+      await client.query('ROLLBACK');
+      return error(res, 'Vui lòng chọn chi nhánh để kiểm kho.', 400);
+    }
+    if (!canAccessBranchData(req.user, maCN)) {
+      await client.query('ROLLBACK');
+      return error(res, 'Bạn không có quyền kiểm kho cho chi nhánh khác.', 403);
+    }
     const ketQua = [];
 
     for (const item of items) {

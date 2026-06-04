@@ -12,6 +12,7 @@ import CartItem from '../components/pos/CartItem'
 import { fmtCurrency, membershipStyle } from '../lib/format'
 import api from '../lib/api'
 import useAuthStore from '../store/authStore'
+import { ROLE, normalizeRole } from '../lib/roles'
 
 const DISCOUNT_RATE = {
   Bronze: 0,
@@ -56,9 +57,13 @@ function normalizeCustomer(item) {
 
 export default function POS() {
   const user = useAuthStore((s) => s.user)
+  const role = normalizeRole(user?.vaiTro)
+  const canPickBranch = role === ROLE.ADMIN
 
   const [categories, setCategories] = useState([])
   const [products, setProducts] = useState([])
+  const [branches, setBranches] = useState([])
+  const [selectedBranch, setSelectedBranch] = useState(user?.maCN || '')
   const [loadingProducts, setLoadingProducts] = useState(false)
   const [activeCategory, setActiveCategory] = useState('all')
   const [search, setSearch] = useState('')
@@ -78,12 +83,15 @@ export default function POS() {
     const loadData = async () => {
       setLoadingProducts(true)
       try {
-        const [categoryRes, productRes] = await Promise.all([
+        const requests = [
           api.get('/loai-san-pham'),
           api.get('/san-pham', { params: { trangThai: 'Đang bán', page: 1, limit: 500 } }),
-        ])
+        ]
+        if (canPickBranch) requests.push(api.get('/chi-nhanh'))
+        const [categoryRes, productRes, branchRes] = await Promise.all(requests)
         setCategories((categoryRes.data || []).map(normalizeCategory))
         setProducts((productRes.data || []).map(normalizeProduct))
+        setBranches(canPickBranch ? (branchRes?.data || []).map((item) => ({ MaCN: item.MaCN || item.macn, TenCN: item.TenCN || item.tencn })) : [])
       } catch (err) {
         toast.error(err.message || 'Không tải được danh mục bán hàng')
       } finally {
@@ -92,7 +100,7 @@ export default function POS() {
     }
 
     loadData()
-  }, [])
+  }, [canPickBranch])
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -189,10 +197,15 @@ export default function POS() {
       return
     }
 
+    if (canPickBranch && !selectedBranch) {
+      toast.error('Vui lòng chọn chi nhánh để tạo hóa đơn')
+      return
+    }
+
     setIsCheckout(true)
     try {
       const payload = {
-        MaCN: user?.maCN,
+        MaCN: canPickBranch ? selectedBranch : user?.maCN,
         MaKH: customer?.MaKH || null,
         phuongThuc: payMethod,
         items: cart.map((i) => ({ MaSP: i.MaSP, SoLuong: i.SoLuong })),
@@ -212,6 +225,21 @@ export default function POS() {
   return (
     <div className="flex gap-4 h-[calc(100vh-3.5rem-2.5rem)] -m-5 p-5">
       <div className="flex-1 flex flex-col gap-3 min-w-0">
+        {canPickBranch && (
+          <div className="flex justify-end">
+            <select
+              value={selectedBranch}
+              onChange={(e) => setSelectedBranch(e.target.value)}
+              className="input bg-white shadow-sm w-72"
+            >
+              <option value="">-- Chọn chi nhánh --</option>
+              {branches.map((branch) => (
+                <option key={branch.MaCN} value={branch.MaCN}>{branch.TenCN}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input

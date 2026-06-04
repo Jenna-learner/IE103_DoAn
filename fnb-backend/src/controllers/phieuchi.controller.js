@@ -70,6 +70,7 @@ const create = async (req, res, next) => {
     const loaiChiDb = normalizeLoaiChi(LoaiChi);
 
     if (!maCN) return error(res, 'Không xác định được chi nhánh lập phiếu chi.', 400);
+    if (!canAccessBranchData(req.user, maCN)) return error(res, 'Bạn không có quyền tạo phiếu chi cho chi nhánh khác.', 403);
 
     await db.queryCtx(req, 
       `INSERT INTO PHIEUCHI (MaPC, MaCN, MaNV, NgayChi, LoaiChi, SoTien, MoTa, TrangThai)

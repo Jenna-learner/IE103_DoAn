@@ -53,6 +53,9 @@ const phanCong = async (req, res, next) => {
     const maCN = req.user.maCN || req.body.MaCN;
     const maCL = MaCa || req.body.MaCL;
 
+    if (!maCN) return error(res, 'Vui lòng chọn chi nhánh để phân công.', 400);
+    if (!canAccessBranchData(req.user, maCN)) return error(res, 'Bạn không có quyền phân công cho chi nhánh khác.', 403);
+
     const { rows: trung } = await db.queryCtx(req, 
       `SELECT 1 FROM PHANCONG WHERE MaNV=$1 AND MaCL=$2 AND Ngay=$3 AND MaCN=$4`,
       [MaNV, maCL, NgayLam, maCN]
