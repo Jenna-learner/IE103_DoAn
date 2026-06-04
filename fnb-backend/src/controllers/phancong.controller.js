@@ -6,6 +6,7 @@ const parseKey = (key) => {
   const [MaNV, MaCN, MaCL, Ngay] = String(key).split('|');
   return { MaNV, MaCN, MaCL, Ngay };
 };
+const canAccessBranchData = (user, maCN) => ['admin', 'giam_doc_van_hanh'].includes(user.vaiTro) || (user.maCN && user.maCN === maCN);
 
 const getDanhSachCa = async (req, res, next) => {
   try {
@@ -67,6 +68,7 @@ const capNhatTrangThai = async (req, res, next) => {
   try {
     const { TrangThai } = req.body;
     const { MaNV, MaCN, MaCL, Ngay } = parseKey(req.params.maPC);
+    if (!canAccessBranchData(req.user, MaCN)) return error(res, 'Bạn không có quyền cập nhật phân công thuộc chi nhánh khác.', 403);
     await db.query(`UPDATE PHANCONG SET TrangThai = $1 WHERE MaNV=$2 AND MaCN=$3 AND MaCL=$4 AND Ngay=$5`, [TrangThai, MaNV, MaCN, MaCL, Ngay]);
     return success(res, null, `Cập nhật trạng thái ca → ${TrangThai}`);
   } catch (err) { next(err); }
@@ -75,6 +77,7 @@ const capNhatTrangThai = async (req, res, next) => {
 const xoaPhanCong = async (req, res, next) => {
   try {
     const { MaNV, MaCN, MaCL, Ngay } = parseKey(req.params.maPC);
+    if (!canAccessBranchData(req.user, MaCN)) return error(res, 'Bạn không có quyền xoá phân công thuộc chi nhánh khác.', 403);
     await db.query(`DELETE FROM PHANCONG WHERE MaNV=$1 AND MaCN=$2 AND MaCL=$3 AND Ngay=$4`, [MaNV, MaCN, MaCL, Ngay]);
     return success(res, null, 'Đã xoá phân công ca');
   } catch (err) { next(err); }

@@ -34,7 +34,7 @@ const useAuthStore = create(
       // ── Đăng xuất ───────────────────────────────────────
       logout: () => {
         localStorage.removeItem('fnb_token')
-        localStorage.removeItem('fnb_user')
+        localStorage.removeItem('fnb_auth')
         set({ token: null, user: null })
       },
 

@@ -48,6 +48,9 @@ function normalizeLog(item) {
 }
 
 const LOG_LABEL = {
+  Adjustment: 'Điều chỉnh',
+  Wastage: 'Hao hụt',
+  ReverseExport: 'Hoàn kho',
   Audit_Loss: 'Hao hụt',
   Audit_Gain: 'Điều chỉnh tăng',
 }
@@ -74,7 +77,7 @@ export default function KiemKho() {
         thucTe: '',
         lyDo: '',
       })))
-      setLogs((logRes.data || []).map(normalizeLog).filter((item) => ['Audit_Loss', 'Audit_Gain'].includes(item.loai)))
+      setLogs((logRes.data || []).map(normalizeLog).filter((item) => ['Adjustment', 'Wastage', 'Audit_Loss', 'Audit_Gain'].includes(item.loai)))
       if (showToast) toast.success('Đã làm mới dữ liệu kiểm kho')
     } catch (err) {
       toast.error(err.message || 'Không tải được dữ liệu kiểm kho')
@@ -296,8 +299,8 @@ export default function KiemKho() {
                 <p className="text-[11px] text-gray-400">{log.maNL} · {LOG_LABEL[log.loai] || log.loai} · {log.tenNV}</p>
               </div>
               <div className="text-right">
-                <p className={clsx('text-sm font-semibold', log.loai === 'Audit_Loss' ? 'text-red-600' : 'text-green-600')}>
-                  {log.loai === 'Audit_Gain' ? '+' : '-'}{fmtNumber(log.soLuong)} {log.donVi}
+                <p className={clsx('text-sm font-semibold', (log.loai === 'Wastage' || log.loai === 'Audit_Loss' || log.sau < log.truoc) ? 'text-red-600' : 'text-green-600')}>
+                  {(log.loai === 'Audit_Gain' || log.sau >= log.truoc) ? '+' : '-'}{fmtNumber(log.soLuong)} {log.donVi}
                 </p>
                 <p className="text-[11px] text-gray-400">{fmtNumber(log.truoc)} → {fmtNumber(log.sau)}</p>
                 <p className="text-[11px] text-gray-400">{fmtDateTime(log.ngay)}</p>

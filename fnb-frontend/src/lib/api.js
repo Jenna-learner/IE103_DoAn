@@ -28,7 +28,7 @@ api.interceptors.response.use(
     // Token hết hạn → tự logout
     if (err.response?.status === 401 || err.response?.status === 403) {
       localStorage.removeItem('fnb_token')
-      localStorage.removeItem('fnb_user')
+      localStorage.removeItem('fnb_auth')
       window.location.href = '/login'
     }
 

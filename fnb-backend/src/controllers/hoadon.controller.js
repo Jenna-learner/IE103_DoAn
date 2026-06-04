@@ -6,6 +6,7 @@ const DISCOUNT_RATE = { Bronze: 0, Silver: 0.03, Gold: 0.05, Platinum: 0.1 };
 
 const mapPayMethod    = (m) => (m === 'E-Wallet' ? 'EWallet' : m);
 const mapPayMethodOut = (m) => (m === 'EWallet'  ? 'E-Wallet' : m);
+const canAccessBranchData = (user, maCN) => ['admin', 'giam_doc_van_hanh'].includes(user.vaiTro) || (user.maCN && user.maCN === maCN);
 
 // pg trả về column names lowercase → map sang PascalCase cho frontend
 const mapRow = (r) => ({
@@ -109,6 +110,7 @@ const getById = async (req, res, next) => {
       [req.params.maHD]
     );
     if (!rows[0]) return error(res, 'Hóa đơn không tồn tại.', 404);
+    if (!canAccessBranchData(req.user, rows[0].macn)) return error(res, 'Bạn không có quyền xem hóa đơn thuộc chi nhánh khác.', 403);
 
     const { rows: chiTiet } = await db.query(
       `SELECT cthd.MaSP, sp.TenSP, cthd.SoLuong, cthd.GiaBanTaiThoiDiem AS DonGia, cthd.ThanhTien
@@ -191,11 +193,20 @@ const create = async (req, res, next) => {
 
 const huyDon = async (req, res, next) => {
   try {
-    const { rows } = await db.query(`SELECT TrangThai FROM HOADON WHERE MaHD = $1`, [req.params.maHD]);
-    const hd = rows[0];
+    // Kiểm tra tồn tại + branch scoping trước
+    const { rows: checkRows } = await db.query(`SELECT TrangThai, MaCN FROM HOADON WHERE MaHD = $1`, [req.params.maHD]);
+    const hd = checkRows[0];
     if (!hd) return error(res, 'Hóa đơn không tồn tại.', 404);
+    if (!canAccessBranchData(req.user, hd.macn)) return error(res, 'Bạn không có quyền huỷ hóa đơn thuộc chi nhánh khác.', 403);
     if (hd.trangthai === 'Cancelled') return error(res, 'Hóa đơn đã bị huỷ.', 400);
-    await db.query(`UPDATE HOADON SET TrangThai = 'Cancelled', UpdatedAt=NOW() WHERE MaHD = $1`, [req.params.maHD]);
+
+    // Conditional UPDATE: chỉ update nếu trạng thái vẫn chưa phải Cancelled (tránh race condition)
+    const { rowCount } = await db.query(
+      `UPDATE HOADON SET TrangThai = 'Cancelled', UpdatedAt = NOW()
+       WHERE MaHD = $1 AND TrangThai <> 'Cancelled'`,
+      [req.params.maHD]
+    );
+    if (rowCount === 0) return error(res, 'Hóa đơn đã bị huỷ bởi thao tác đồng thời khác.', 409);
     return success(res, null, 'Đã huỷ hóa đơn thành công.');
   } catch (err) { next(err); }
 };

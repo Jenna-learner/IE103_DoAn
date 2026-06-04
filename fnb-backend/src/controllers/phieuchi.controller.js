@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { genMa } = require('../utils/magen');
 const { success, error } = require('../utils/response');
+const canAccessBranchData = (user, maCN) => ['admin', 'giam_doc_van_hanh'].includes(user.vaiTro) || (user.maCN && user.maCN === maCN);
 
 const EXPENSE_TYPE_MAP = {
   Electricity: 'Điện',
@@ -81,14 +82,34 @@ const create = async (req, res, next) => {
 
 const duyet = async (req, res, next) => {
   try {
-    await db.query(`UPDATE PHIEUCHI SET TrangThai = 'Approved' WHERE MaPC = $1`, [req.params.maPC]);
+    const { rows } = await db.query(`SELECT MaCN, TrangThai FROM PHIEUCHI WHERE MaPC = $1`, [req.params.maPC]);
+    if (!rows[0]) return error(res, 'Phiếu chi không tồn tại.', 404);
+    if (!canAccessBranchData(req.user, rows[0].macn)) return error(res, 'Bạn không có quyền duyệt phiếu chi thuộc chi nhánh khác.', 403);
+    if (rows[0].trangthai !== 'Pending') return error(res, 'Chỉ duyệt được phiếu ở trạng thái Pending.', 400);
+
+    // Conditional UPDATE: chỉ duyệt nếu vẫn còn Pending (tránh race condition)
+    const { rowCount } = await db.query(
+      `UPDATE PHIEUCHI SET TrangThai = 'Approved' WHERE MaPC = $1 AND TrangThai = 'Pending'`,
+      [req.params.maPC]
+    );
+    if (rowCount === 0) return error(res, 'Phiếu chi đã được xử lý bởi thao tác đồng thời khác.', 409);
     return success(res, null, 'Phiếu chi đã được duyệt');
   } catch (err) { next(err); }
 };
 
 const tuChoi = async (req, res, next) => {
   try {
-    await db.query(`UPDATE PHIEUCHI SET TrangThai = 'Rejected' WHERE MaPC = $1`, [req.params.maPC]);
+    const { rows } = await db.query(`SELECT MaCN, TrangThai FROM PHIEUCHI WHERE MaPC = $1`, [req.params.maPC]);
+    if (!rows[0]) return error(res, 'Phiếu chi không tồn tại.', 404);
+    if (!canAccessBranchData(req.user, rows[0].macn)) return error(res, 'Bạn không có quyền từ chối phiếu chi thuộc chi nhánh khác.', 403);
+    if (rows[0].trangthai !== 'Pending') return error(res, 'Chỉ từ chối được phiếu ở trạng thái Pending.', 400);
+
+    // Conditional UPDATE: chỉ từ chối nếu vẫn còn Pending (tránh race condition)
+    const { rowCount } = await db.query(
+      `UPDATE PHIEUCHI SET TrangThai = 'Rejected' WHERE MaPC = $1 AND TrangThai = 'Pending'`,
+      [req.params.maPC]
+    );
+    if (rowCount === 0) return error(res, 'Phiếu chi đã được xử lý bởi thao tác đồng thời khác.', 409);
     return success(res, null, 'Phiếu chi đã bị từ chối');
   } catch (err) { next(err); }
 };
