@@ -27,7 +27,7 @@ const getAll = async (req, res, next) => {
 
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
 
-    const { rows } = await db.query(
+    const { rows } = await db.queryCtx(req, 
       `SELECT nv.MaNV, nv.HoTen, nv.SDT, nv.Email, nv.DonGiaCa AS LuongCoBan, nv.TrangThai,
               bp.TenBP, nc.MaCN, cn.TenCN,
               tk.TenDangNhap, tk.VaiTro, tk.IsActive AS TaiKhoanActive
@@ -46,7 +46,7 @@ const getAll = async (req, res, next) => {
 
 const getById = async (req, res, next) => {
   try {
-    const { rows } = await db.query(
+    const { rows } = await db.queryCtx(req, 
       `SELECT nv.*, bp.TenBP, nc.MaCN, cn.TenCN, tk.TenDangNhap, tk.VaiTro
        FROM NHANVIEN nv
        LEFT JOIN BOPHAN bp ON bp.MaBP = nv.MaBP
@@ -114,7 +114,7 @@ const update = async (req, res, next) => {
     const { HoTen, MaBP, SDT, Email, DonGiaCa, LuongCoBan, TrangThai } = req.body;
     const trangThaiDb = mapTrangThaiIn(TrangThai);
 
-    const { rows: targetRows } = await db.query(
+    const { rows: targetRows } = await db.queryCtx(req, 
       `SELECT nc.MaCN
        FROM NHANVIEN nv
        LEFT JOIN NHANVIEN_CHINHANH nc ON nc.MaNV = nv.MaNV AND nc.DenNgay IS NULL
@@ -127,7 +127,7 @@ const update = async (req, res, next) => {
     }
 
     if (trangThaiDb !== 'Active') {
-      const { rows: related } = await db.query(
+      const { rows: related } = await db.queryCtx(req, 
         `SELECT COUNT(*) FILTER (WHERE pc.TrangThai = 'Assigned' AND pc.Ngay >= CURRENT_DATE) AS pending_shifts
          FROM NHANVIEN nv
          LEFT JOIN PHANCONG pc ON pc.MaNV = nv.MaNV
@@ -142,7 +142,7 @@ const update = async (req, res, next) => {
       }
     }
 
-    await db.query(
+    await db.queryCtx(req, 
       `UPDATE NHANVIEN SET HoTen=$1, MaBP=$2, SDT=$3, Email=$4, DonGiaCa=$5, TrangThai=$6, UpdatedAt=NOW() WHERE MaNV=$7`,
       [HoTen, MaBP, SDT, Email, DonGiaCa || LuongCoBan, trangThaiDb, req.params.maNV]
     );

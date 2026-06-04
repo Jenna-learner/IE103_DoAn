@@ -3,7 +3,6 @@
  * JWT token tự động được đính kèm qua interceptor
  */
 import axios from 'axios'
-import { isMockModeEnabled, mockAdapter } from './mock'
 
 const api = axios.create({
   baseURL: '/api/v1',   // Vite proxy → http://localhost:5000/api/v1
@@ -15,7 +14,6 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('fnb_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
-  if (isMockModeEnabled()) config.adapter = mockAdapter
   return config
 })
 

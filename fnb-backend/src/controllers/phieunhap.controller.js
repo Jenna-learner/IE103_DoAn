@@ -20,7 +20,8 @@ const getAll = async (req, res, next) => {
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
     params.push(limit, offset);
 
-    const { rows } = await db.query(
+    // queryCtx: PHIEUNHAP có RLS policy
+    const { rows } = await db.queryCtx(req,
       `SELECT pn.*, ncc.TenNCC, nv.HoTen AS TenNhanVienLap, cn.TenCN,
               pn.CreatedAt AS NgayTao
        FROM PHIEUNHAP pn
@@ -39,7 +40,7 @@ const getAll = async (req, res, next) => {
 
 const getById = async (req, res, next) => {
   try {
-    const { rows } = await db.query(
+    const { rows } = await db.queryCtx(req,
       `SELECT pn.*, ncc.TenNCC, nv.HoTen AS TenNhanVienLap
        FROM PHIEUNHAP pn
        LEFT JOIN NHACUNGCAP ncc ON ncc.MaNCC = pn.MaNCC
@@ -95,13 +96,13 @@ const create = async (req, res, next) => {
 
 const duyet = async (req, res, next) => {
   try {
-    const { rows } = await db.query(`SELECT TrangThai, MaCN FROM PHIEUNHAP WHERE MaPN = $1`, [req.params.maPN]);
+    const { rows } = await db.queryCtx(req, `SELECT TrangThai, MaCN FROM PHIEUNHAP WHERE MaPN = $1`, [req.params.maPN]);
     if (!rows[0]) return error(res, 'Phiếu nhập không tồn tại.', 404);
     if (!canAccessBranchData(req.user, rows[0].macn)) return error(res, 'Bạn không có quyền duyệt phiếu nhập thuộc chi nhánh khác.', 403);
     if (rows[0].trangthai !== 'Draft') return error(res, 'Chỉ duyệt được phiếu ở trạng thái Draft.', 400);
 
     // Conditional UPDATE: chỉ duyệt nếu vẫn còn ở Draft (tránh race condition double-approve)
-    const { rowCount } = await db.query(
+    const { rowCount } = await db.queryCtx(req,
       `UPDATE PHIEUNHAP SET TrangThai = 'Received', UpdatedAt = NOW()
        WHERE MaPN = $1 AND TrangThai = 'Draft'`,
       [req.params.maPN]
@@ -113,13 +114,13 @@ const duyet = async (req, res, next) => {
 
 const huy = async (req, res, next) => {
   try {
-    const { rows } = await db.query(`SELECT TrangThai, MaCN FROM PHIEUNHAP WHERE MaPN = $1`, [req.params.maPN]);
+    const { rows } = await db.queryCtx(req, `SELECT TrangThai, MaCN FROM PHIEUNHAP WHERE MaPN = $1`, [req.params.maPN]);
     if (!rows[0]) return error(res, 'Phiếu nhập không tồn tại.', 404);
     if (!canAccessBranchData(req.user, rows[0].macn)) return error(res, 'Bạn không có quyền huỷ phiếu nhập thuộc chi nhánh khác.', 403);
     if (rows[0].trangthai === 'Received') return error(res, 'Không thể huỷ phiếu đã duyệt.', 400);
 
     // Conditional UPDATE: chỉ huỷ nếu chưa phải Received hoặc Cancelled (tránh race condition)
-    const { rowCount } = await db.query(
+    const { rowCount } = await db.queryCtx(req,
       `UPDATE PHIEUNHAP SET TrangThai = 'Cancelled', UpdatedAt = NOW()
        WHERE MaPN = $1 AND TrangThai NOT IN ('Received', 'Cancelled')`,
       [req.params.maPN]

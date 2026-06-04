@@ -13,7 +13,7 @@ const getTonKho = async (req, res, next) => {
 
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
 
-    const { rows } = await db.query(
+    const { rows } = await db.queryCtx(req, 
       `SELECT tk.MaCN, cn.TenCN, tk.MaNL, nl.TenNL, nl.DonViTinh,
               tk.SoLuongTon, tk.TonToiThieu,
               (tk.SoLuongTon <= tk.TonToiThieu) AS IsCanhBao
@@ -43,7 +43,7 @@ const getNhatKy = async (req, res, next) => {
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
     params.push(limit, offset);
 
-    const { rows } = await db.query(
+    const { rows } = await db.queryCtx(req, 
       `SELECT nk.*, nk.NgayGhi AS NgayThayDoi, nl.TenNL, nl.DonViTinh, nv.HoTen AS TenNhanVien
        FROM NHATKYKHO nk
        JOIN NGUYENLIEU nl ON nl.MaNL = nk.MaNL
@@ -76,7 +76,7 @@ const capNhatMucToiThieu = async (req, res, next) => {
   try {
     const { MaCN, MaNL, TonToiThieu } = req.body;
     const maCN = MaCN || req.user.maCN;
-    await db.query(`UPDATE TONKHO_CHINHANH SET TonToiThieu = $1, UpdatedAt=NOW() WHERE MaCN = $2 AND MaNL = $3`, [TonToiThieu, maCN, MaNL]);
+    await db.queryCtx(req, `UPDATE TONKHO_CHINHANH SET TonToiThieu = $1, UpdatedAt=NOW() WHERE MaCN = $2 AND MaNL = $3`, [TonToiThieu, maCN, MaNL]);
     return success(res, null, 'Cập nhật mức tồn tối thiểu thành công');
   } catch (err) { next(err); }
 };
