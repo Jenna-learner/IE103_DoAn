@@ -12,18 +12,22 @@ import { exportExcel } from '../lib/exportExcel'
 import { fmtNumber } from '../lib/format'
 
 const LOAI_CONFIG = {
-  Import:     { label: 'Nhập kho',    cls: 'bg-green-100 text-green-700', icon: <ArrowDownCircle size={12} /> },
-  Export:     { label: 'Xuất kho',    cls: 'bg-blue-100 text-blue-700',   icon: <ArrowUpCircle size={12} /> },
-  Audit_Loss: { label: 'Hao hụt',     cls: 'bg-red-100 text-red-600',     icon: <AlertTriangle size={12} /> },
-  Audit_Gain: { label: 'Điều chỉnh+', cls: 'bg-amber-100 text-amber-700', icon: <RefreshCw size={12} /> },
+  Import:        { label: 'Nhập kho',       cls: 'bg-green-100 text-green-700', icon: <ArrowDownCircle size={12} /> },
+  Export:        { label: 'Xuất kho',       cls: 'bg-blue-100 text-blue-700',   icon: <ArrowUpCircle size={12} /> },
+  Adjustment:    { label: 'Điều chỉnh',     cls: 'bg-amber-100 text-amber-700', icon: <RefreshCw size={12} /> },
+  Wastage:       { label: 'Hao hụt',        cls: 'bg-red-100 text-red-600',     icon: <AlertTriangle size={12} /> },
+  ReverseExport: { label: 'Hoàn kho',       cls: 'bg-emerald-100 text-emerald-700', icon: <RefreshCw size={12} /> },
+  Audit_Loss:    { label: 'Hao hụt',        cls: 'bg-red-100 text-red-600',     icon: <AlertTriangle size={12} /> },
+  Audit_Gain:    { label: 'Điều chỉnh+',    cls: 'bg-amber-100 text-amber-700', icon: <RefreshCw size={12} /> },
 }
 
 const LOAI_OPTIONS = [
-  { value: '',           label: 'Tất cả loại' },
-  { value: 'Import',     label: 'Nhập kho' },
-  { value: 'Export',     label: 'Xuất kho' },
-  { value: 'Audit_Loss', label: 'Hao hụt' },
-  { value: 'Audit_Gain', label: 'Điều chỉnh+' },
+  { value: '',              label: 'Tất cả loại' },
+  { value: 'Import',        label: 'Nhập kho' },
+  { value: 'Export',        label: 'Xuất kho' },
+  { value: 'Adjustment',    label: 'Điều chỉnh' },
+  { value: 'Wastage',       label: 'Hao hụt' },
+  { value: 'ReverseExport', label: 'Hoàn kho' },
 ]
 
 function fmtDateTime(iso) {
@@ -378,7 +382,8 @@ export default function TonKho() {
               </div>
             ) : filteredNhatKy.map((log) => {
               const cfg = LOAI_CONFIG[log.LoaiBienDong] || { label: log.LoaiBienDong, cls: 'bg-gray-100 text-gray-600', icon: null }
-              const isPlus = log.LoaiBienDong === 'Import' || log.LoaiBienDong === 'Audit_Gain'
+              const isPlus = ['Import', 'ReverseExport', 'Audit_Gain'].includes(log.LoaiBienDong)
+                || (log.LoaiBienDong === 'Adjustment' && log.SoLuongSau >= log.SoLuongTruoc)
 
               return (
                 <div key={log.MaLog} className="grid grid-cols-12 gap-2 px-4 py-3 items-center text-sm hover:bg-gray-50 transition-colors">

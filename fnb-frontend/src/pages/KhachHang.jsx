@@ -140,6 +140,7 @@ export default function KhachHang() {
   }, [modalCustomer, orders])
 
   /* ── Mở modal ── */
+  const closeModal = () => { setModalCustomer(null); setModalMode('view') }
   const openView = (customer) => { setModalCustomer(customer); setModalMode('view') }
   const openAdd  = ()         => { setModalCustomer(null);    setModalMode('add')  }
 
@@ -157,11 +158,13 @@ export default function KhachHang() {
         await api.put(`/khach-hang/${modalCustomer.MaKH}`, {
           TenKH: data.TenKH,
           Email: data.Email || modalCustomer?.Email || null,
+          DiemTichLuy: data.DiemTichLuy,
+          HangThanhVien: data.HangThanhVien,
         })
         toast.success('Đã cập nhật thông tin')
       }
       loadCustomers()
-      setModalCustomer(null)
+      closeModal()
     } catch {
       toast.error('Không thể lưu thông tin khách hàng')
     }
@@ -329,7 +332,7 @@ export default function KhachHang() {
         <KhachHangModal
           customer={modalCustomer}
           mode={modalMode}
-          onClose={() => setModalCustomer(null)}
+          onClose={closeModal}
           onSave={handleSave}
           orderHistory={selectedOrders}
         />

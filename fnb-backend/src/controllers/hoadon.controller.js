@@ -6,6 +6,7 @@ const DISCOUNT_RATE = { Bronze: 0, Silver: 0.03, Gold: 0.05, Platinum: 0.1 };
 
 const mapPayMethod    = (m) => (m === 'E-Wallet' ? 'EWallet' : m);
 const mapPayMethodOut = (m) => (m === 'EWallet'  ? 'E-Wallet' : m);
+const canAccessBranchData = (user, maCN) => ['admin', 'giam_doc_van_hanh'].includes(user.vaiTro) || (user.maCN && user.maCN === maCN);
 
 // pg trả về column names lowercase → map sang PascalCase cho frontend
 const mapRow = (r) => ({
@@ -78,7 +79,8 @@ const getAll = async (req, res, next) => {
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
     params.push(limit, offset);
 
-    const { rows } = await db.query(
+    // queryCtx: HOADON có RLS policy → cần set context để RLS hoạt động đúng
+    const { rows } = await db.queryCtx(req,
       `SELECT hd.MaHD, hd.MaCN, cn.TenCN, hd.MaNV, nv.HoTen AS TenNhanVien,
               hd.MaKH, kh.HoTen AS TenKH, kh.SDT AS SDTKH,
               hd.NgayLap, hd.TongTienHang, hd.GiamGia, hd.TongThanhToan, hd.TrangThai
@@ -92,14 +94,14 @@ const getAll = async (req, res, next) => {
       params
     );
 
-    const { rows: cr } = await db.query(`SELECT COUNT(*) FROM HOADON hd ${where}`, params.slice(0, -2));
+    const { rows: cr } = await db.queryCtx(req, `SELECT COUNT(*) FROM HOADON hd ${where}`, params.slice(0, -2));
     return paginated(res, rows.map(mapRow), parseInt(cr[0].count), page, limit);
   } catch (err) { next(err); }
 };
 
 const getById = async (req, res, next) => {
   try {
-    const { rows } = await db.query(
+    const { rows } = await db.queryCtx(req,
       `SELECT hd.*, cn.TenCN, nv.HoTen AS TenNhanVien, kh.HoTen AS TenKH, kh.SDT AS SDTKH, kh.HangThanhVien
        FROM HOADON hd
        JOIN CHINHANH cn ON cn.MaCN = hd.MaCN
@@ -109,6 +111,7 @@ const getById = async (req, res, next) => {
       [req.params.maHD]
     );
     if (!rows[0]) return error(res, 'Hóa đơn không tồn tại.', 404);
+    if (!canAccessBranchData(req.user, rows[0].macn)) return error(res, 'Bạn không có quyền xem hóa đơn thuộc chi nhánh khác.', 403);
 
     const { rows: chiTiet } = await db.query(
       `SELECT cthd.MaSP, sp.TenSP, cthd.SoLuong, cthd.GiaBanTaiThoiDiem AS DonGia, cthd.ThanhTien
@@ -118,7 +121,7 @@ const getById = async (req, res, next) => {
       [req.params.maHD]
     );
 
-    const { rows: thanhToan } = await db.query(`SELECT * FROM THANHTOAN WHERE MaHD = $1 ORDER BY NgayTT DESC`, [req.params.maHD]);
+    const { rows: thanhToan } = await db.queryCtx(req, `SELECT * FROM THANHTOAN WHERE MaHD = $1 ORDER BY NgayTT DESC`, [req.params.maHD]);
     return success(res, { ...mapDetail(rows[0]), chiTiet: chiTiet.map(mapChiTiet), thanhToan: thanhToan[0] ? mapThanhToan(thanhToan[0]) : null });
   } catch (err) { next(err); }
 };
@@ -127,10 +130,20 @@ const create = async (req, res, next) => {
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
+    // SET LOCAL context ngay trong transaction này để RLS hoạt động đúng
+    await client.query(
+      `SELECT set_config('app.current_employee_id', $1, true),
+              set_config('app.current_branch_id',   $2, true)`,
+      [String(req.user.maNV), String(req.user.maCN || '')]
+    );
+
     const { MaCN, MaKH, phuongThuc, items } = req.body;
     const MaNV = req.user.maNV;
     const maCN = MaCN || req.user.maCN;
     const MaHD = genMa('HD');
+
+    if (!maCN) return error(res, 'Vui lòng chọn chi nhánh để tạo hóa đơn.', 400);
+    if (!canAccessBranchData(req.user, maCN)) return error(res, 'Bạn không có quyền tạo hóa đơn cho chi nhánh khác.', 403);
 
     let tongTienHang = 0;
     const enriched = [];
@@ -173,6 +186,10 @@ const create = async (req, res, next) => {
       [MaTT, MaHD, mapPayMethod(phuongThuc), hdRow[0].tongthanhtoan]
     );
 
+    if (MaKH) {
+      await client.query(`CALL sp_UpdateCustomerLoyalty($1)`, [MaHD]);
+    }
+
     await client.query('COMMIT');
 
     return success(res, {
@@ -191,11 +208,20 @@ const create = async (req, res, next) => {
 
 const huyDon = async (req, res, next) => {
   try {
-    const { rows } = await db.query(`SELECT TrangThai FROM HOADON WHERE MaHD = $1`, [req.params.maHD]);
-    const hd = rows[0];
+    // Kiểm tra tồn tại + branch scoping trước
+    const { rows: checkRows } = await db.queryCtx(req, `SELECT TrangThai, MaCN FROM HOADON WHERE MaHD = $1`, [req.params.maHD]);
+    const hd = checkRows[0];
     if (!hd) return error(res, 'Hóa đơn không tồn tại.', 404);
+    if (!canAccessBranchData(req.user, hd.macn)) return error(res, 'Bạn không có quyền huỷ hóa đơn thuộc chi nhánh khác.', 403);
     if (hd.trangthai === 'Cancelled') return error(res, 'Hóa đơn đã bị huỷ.', 400);
-    await db.query(`UPDATE HOADON SET TrangThai = 'Cancelled', UpdatedAt=NOW() WHERE MaHD = $1`, [req.params.maHD]);
+
+    // Conditional UPDATE: chỉ update nếu trạng thái vẫn chưa phải Cancelled (tránh race condition)
+    const { rowCount } = await db.queryCtx(req,
+      `UPDATE HOADON SET TrangThai = 'Cancelled', UpdatedAt = NOW()
+       WHERE MaHD = $1 AND TrangThai <> 'Cancelled'`,
+      [req.params.maHD]
+    );
+    if (rowCount === 0) return error(res, 'Hóa đơn đã bị huỷ bởi thao tác đồng thời khác.', 409);
     return success(res, null, 'Đã huỷ hóa đơn thành công.');
   } catch (err) { next(err); }
 };

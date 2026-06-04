@@ -101,7 +101,7 @@ export default function App() {
           <Route path="kho">
             <Route path="ton-kho"  element={<ProtectedRoute roles={INVENTORY_VIEW}><TonKho /></ProtectedRoute>} />
             <Route path="nhat-ky"  element={<ProtectedRoute roles={INVENTORY_VIEW}><TonKho /></ProtectedRoute>} />
-            <Route path="kiem-kho" element={<ProtectedRoute roles={[...INVENTORY_EDIT, ROLE.CASHIER, ROLE.OPS_DIRECTOR]}><KiemKho /></ProtectedRoute>} />
+            <Route path="kiem-kho" element={<ProtectedRoute roles={INVENTORY_EDIT}><KiemKho /></ProtectedRoute>} />
           </Route>
 
           {/* Quản lý */}

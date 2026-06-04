@@ -104,7 +104,7 @@ const create = async (req, res, next) => {
 
 const update = async (req, res, next) => {
   try {
-    const { TenKH, Email } = req.body;
+    const { TenKH, Email, DiemTichLuy, HangThanhVien } = req.body;
 
     const { rows: duplicated } = await db.query(
       `SELECT 1
@@ -118,7 +118,19 @@ const update = async (req, res, next) => {
       return error(res, 'Email khách hàng đã tồn tại.', 409);
     }
 
-    await db.query(`UPDATE KHACHHANG SET HoTen=$1, Email=$2, UpdatedAt=NOW() WHERE MaKH=$3`, [TenKH, Email, req.params.maKH]);
+    const fields = ['HoTen = $1', 'Email = $2', 'UpdatedAt = NOW()'];
+    const params = [TenKH, Email, req.params.maKH];
+
+    if (DiemTichLuy !== undefined) {
+      fields.splice(fields.length - 1, 0, `DiemTichLuy = $${params.length + 1}`);
+      params.push(Number(DiemTichLuy));
+    }
+    if (HangThanhVien) {
+      fields.splice(fields.length - 1, 0, `HangThanhVien = $${params.length + 1}`);
+      params.push(HangThanhVien);
+    }
+
+    await db.query(`UPDATE KHACHHANG SET ${fields.join(', ')} WHERE MaKH=$3`, params);
     return success(res, null, 'Cập nhật thông tin khách hàng thành công');
   } catch (err) { next(err); }
 };

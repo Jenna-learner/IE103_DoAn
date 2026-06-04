@@ -7,7 +7,7 @@ const { success, error } = require('../utils/response');
 // ── CHI NHÁNH ──────────────────────────────────────────────
 const getAllCN = async (req, res, next) => {
   try {
-    const { rows } = await db.query(`SELECT * FROM CHINHANH ORDER BY TenCN`);
+    const { rows } = await db.query(`SELECT * FROM CHINHANH ORDER BY COALESCE(NULLIF(regexp_replace(MaCN, '\\D', '', 'g'), ''), '0')::INT, MaCN`);
     return success(res, rows);
   } catch (err) { next(err); }
 };
@@ -95,7 +95,7 @@ const updateCN = async (req, res, next) => {
 // ── BỘ PHẬN ────────────────────────────────────────────────
 const getAllBP = async (req, res, next) => {
   try {
-    const { rows } = await db.query(`SELECT * FROM BOPHAN ORDER BY TenBP`);
+    const { rows } = await db.query(`SELECT * FROM BOPHAN ORDER BY COALESCE(NULLIF(regexp_replace(MaBP, '\\D', '', 'g'), ''), '0')::INT, MaBP`);
     return success(res, rows);
   } catch (err) { next(err); }
 };

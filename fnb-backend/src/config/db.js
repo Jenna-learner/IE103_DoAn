@@ -46,4 +46,43 @@ const query = (text, params) => pool.query(text, params);
  */
 const getClient = () => pool.connect();
 
-module.exports = { query, getClient, pool };
+/**
+ * Query có RLS context – dùng cho các query cần PostgreSQL RLS hoạt động đúng.
+ *
+ * Cơ chế: lấy một dedicated client từ pool, SET LOCAL app.current_employee_id
+ * và app.current_branch_id trong một transaction ngắn, chạy query thực sự trên
+ * CÙNG connection đó, rồi release. SET LOCAL đảm bảo config chỉ sống trong
+ * transaction này và không leak sang request khác dù pool tái dùng connection.
+ *
+ * Dùng thay thế db.query() ở các controller cần RLS:
+ *   await db.queryCtx(req, `SELECT ...`, [params])
+ *
+ * @param {object} req    - Express request (cần req.user.maNV và req.user.maCN)
+ * @param {string} text   - SQL query string
+ * @param {Array}  params - Query parameters
+ * @returns {Promise<QueryResult>}
+ */
+const queryCtx = async (req, text, params) => {
+  const maNV = req?.user?.maNV ? String(req.user.maNV) : '';
+  const maCN = req?.user?.maCN ? String(req.user.maCN) : '';
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `SELECT set_config('app.current_employee_id', $1, true),
+              set_config('app.current_branch_id',   $2, true)`,
+      [maNV, maCN]
+    );
+    const result = await client.query(text, params);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+module.exports = { query, getClient, pool, queryCtx };

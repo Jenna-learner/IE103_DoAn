@@ -10,8 +10,9 @@
  *   kho                → Nhân viên kho vận
  */
 const jwt = require('jsonwebtoken');
+const { setDbContext } = require('./dbContext');
 
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
 
@@ -23,9 +24,14 @@ const authenticate = (req, res, next) => {
     // Payload: { maTK, maNV, tenDangNhap, vaiTro, maCN, hoTen }
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
-    next();
+
+    // Inject DB session context cho PostgreSQL RLS (app.current_employee_id)
+    await setDbContext(req, res, next);
   } catch (err) {
-    return res.status(403).json({ success: false, message: 'Token không hợp lệ hoặc đã hết hạn.' });
+    if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+      return res.status(403).json({ success: false, message: 'Token không hợp lệ hoặc đã hết hạn.' });
+    }
+    next(err);
   }
 };
 

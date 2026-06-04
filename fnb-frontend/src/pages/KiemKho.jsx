@@ -6,7 +6,7 @@ import clsx from 'clsx'
 import api from '../lib/api'
 import { fmtNumber } from '../lib/format'
 import { useAuthStore } from '../store/authStore'
-import { INVENTORY_WRITE_ROLES, normalizeRole } from '../lib/roles'
+import { INVENTORY_WRITE_ROLES, ROLE, normalizeRole } from '../lib/roles'
 
 function fmtNow() {
   return new Date().toLocaleString('vi-VN', {
@@ -48,6 +48,9 @@ function normalizeLog(item) {
 }
 
 const LOG_LABEL = {
+  Adjustment: 'Điều chỉnh',
+  Wastage: 'Hao hụt',
+  ReverseExport: 'Hoàn kho',
   Audit_Loss: 'Hao hụt',
   Audit_Gain: 'Điều chỉnh tăng',
 }
@@ -56,8 +59,11 @@ export default function KiemKho() {
   const { user } = useAuthStore()
   const role = normalizeRole(user?.vaiTro)
   const canSubmit = INVENTORY_WRITE_ROLES.includes(role)
+  const canPickBranch = role === ROLE.ADMIN
   const [rows, setRows] = useState([])
   const [logs, setLogs] = useState([])
+  const [branches, setBranches] = useState([])
+  const [selectedBranch, setSelectedBranch] = useState(user?.maCN || '')
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [search, setSearch] = useState('')
@@ -65,23 +71,28 @@ export default function KiemKho() {
   const loadData = useCallback(async (showToast = false) => {
     setLoading(true)
     try {
-      const [stockRes, logRes] = await Promise.all([
-        api.get('/kho/ton-kho'),
-        api.get('/kho/nhat-ky'),
-      ])
+      const params = canPickBranch && selectedBranch ? { maCN: selectedBranch } : {}
+      const requests = [
+        api.get('/kho/ton-kho', { params }),
+        api.get('/kho/nhat-ky', { params }),
+      ]
+      if (canPickBranch) requests.push(api.get('/chi-nhanh'))
+
+      const [stockRes, logRes, branchRes] = await Promise.all(requests)
       setRows((stockRes.data || []).map((item) => ({
         ...normalizeStock(item),
         thucTe: '',
         lyDo: '',
       })))
-      setLogs((logRes.data || []).map(normalizeLog).filter((item) => ['Audit_Loss', 'Audit_Gain'].includes(item.loai)))
+      setLogs((logRes.data || []).map(normalizeLog).filter((item) => ['Adjustment', 'Wastage', 'Audit_Loss', 'Audit_Gain'].includes(item.loai)))
+      setBranches(canPickBranch ? (branchRes?.data || []).map((item) => ({ MaCN: item.MaCN || item.macn, TenCN: item.TenCN || item.tencn })) : [])
       if (showToast) toast.success('Đã làm mới dữ liệu kiểm kho')
     } catch (err) {
       toast.error(err.message || 'Không tải được dữ liệu kiểm kho')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [canPickBranch, selectedBranch])
 
   useEffect(() => {
     loadData()
@@ -113,6 +124,10 @@ export default function KiemKho() {
 
   const handleSubmit = async () => {
     if (!canSubmit) return
+    if (canPickBranch && !selectedBranch) {
+      toast.error('Vui lòng chọn chi nhánh để kiểm kho')
+      return
+    }
     if (!validate()) return
 
     const items = rows
@@ -127,7 +142,7 @@ export default function KiemKho() {
     setSubmitting(true)
     try {
       const res = await api.post('/kho/kiem-kho', {
-        MaCN: user?.maCN,
+        MaCN: canPickBranch ? selectedBranch : user?.maCN,
         items,
         GhiChu: rows.filter((row) => row.lyDo.trim()).map((row) => `${row.tenNL}: ${row.lyDo.trim()}`).join(' | '),
       })
@@ -164,6 +179,18 @@ export default function KiemKho() {
       </div>
 
       <div className="card shrink-0 flex flex-wrap items-center justify-between gap-3">
+        {canPickBranch && (
+          <select
+            value={selectedBranch}
+            onChange={(e) => setSelectedBranch(e.target.value)}
+            className="input w-full md:w-64 text-sm"
+          >
+            <option value="">-- Chọn chi nhánh --</option>
+            {branches.map((branch) => (
+              <option key={branch.MaCN} value={branch.MaCN}>{branch.TenCN}</option>
+            ))}
+          </select>
+        )}
         <div className="relative w-full md:w-80">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -296,8 +323,8 @@ export default function KiemKho() {
                 <p className="text-[11px] text-gray-400">{log.maNL} · {LOG_LABEL[log.loai] || log.loai} · {log.tenNV}</p>
               </div>
               <div className="text-right">
-                <p className={clsx('text-sm font-semibold', log.loai === 'Audit_Loss' ? 'text-red-600' : 'text-green-600')}>
-                  {log.loai === 'Audit_Gain' ? '+' : '-'}{fmtNumber(log.soLuong)} {log.donVi}
+                <p className={clsx('text-sm font-semibold', (log.loai === 'Wastage' || log.loai === 'Audit_Loss' || log.sau < log.truoc) ? 'text-red-600' : 'text-green-600')}>
+                  {(log.loai === 'Audit_Gain' || log.sau >= log.truoc) ? '+' : '-'}{fmtNumber(log.soLuong)} {log.donVi}
                 </p>
                 <p className="text-[11px] text-gray-400">{fmtNumber(log.truoc)} → {fmtNumber(log.sau)}</p>
                 <p className="text-[11px] text-gray-400">{fmtDateTime(log.ngay)}</p>

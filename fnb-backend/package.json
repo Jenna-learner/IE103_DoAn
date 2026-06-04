@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "db:init": "psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f sql/init.sql"
+    "db:init": "psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f sql/01_schema_ddl.sql && psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f sql/02_triggers_procedures.sql && psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f sql/03_security_roles.sql && psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f sql/04_sample_data.sql",
+    "db:schema": "psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f sql/01_schema_ddl.sql",
+    "db:seed": "psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f sql/04_sample_data.sql"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
