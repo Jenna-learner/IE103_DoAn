@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Truck, Plus, ChevronDown, ChevronUp, CheckCircle,
+  Download, Truck, Plus, ChevronDown, ChevronUp, CheckCircle,
   XCircle, Trash2, RefreshCw, Search, PackagePlus,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 import api from '../lib/api'
+import { exportExcel } from '../lib/exportExcel'
 import { fmtCurrency, fmtNumber } from '../lib/format'
 import useAuthStore from '../store/authStore'
 import { ROLE, normalizeRole } from '../lib/roles'
@@ -427,6 +428,20 @@ export default function PhieuNhap() {
           disabled={loading}
         >
           <RefreshCw size={13} className={clsx(loading && 'animate-spin')} /> Làm mới
+        </button>
+        <button
+          onClick={() => exportExcel('phieu-nhap', 'Phiếu nhập', [
+            { label: 'Mã phiếu', value: 'MaPN' },
+            { label: 'Nhà cung cấp', value: 'TenNCC' },
+            { label: 'Người tạo', value: 'NguoiTao' },
+            { label: 'Ngày nhập', value: 'NgayNhap' },
+            { label: 'Tổng tiền', value: 'TongTien' },
+            { label: 'Trạng thái', value: (row) => STATUS[row.TrangThai]?.label || row.TrangThai },
+          ], filtered)}
+          className="btn-secondary px-3 py-2 text-sm"
+          disabled={filtered.length === 0}
+        >
+          <Download size={13} /> Xuất báo cáo
         </button>
 
         {canCreate && !showForm && (

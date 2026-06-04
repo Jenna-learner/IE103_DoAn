@@ -1,26 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarDays, Plus, X, ChevronLeft, ChevronRight, Users } from 'lucide-react'
+import {
+  ChevronLeft, ChevronRight, Download, Filter, Plus, RefreshCw, Users, X,
+} from 'lucide-react'
 import clsx from 'clsx'
 import toast from 'react-hot-toast'
 
 import api from '../lib/api'
+import { exportExcel } from '../lib/exportExcel'
 import useAuthStore from '../store/authStore'
-import { ROLE, normalizeRole } from '../lib/roles'
+import { ROLE, ROLE_LABEL, normalizeRole } from '../lib/roles'
 
-const DOW = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']
-
-const ROLE_LABEL = {
-  [ROLE.ADMIN]: 'Admin',
-  [ROLE.BRANCH_MANAGER]: 'Quản lý chi nhánh',
-  [ROLE.CASHIER]: 'Thu ngân',
-  [ROLE.WAREHOUSE]: 'Kho vận',
+const DOW = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật']
+const STATUS_LABEL = {
+  Assigned: 'Đã phân công',
+  Done: 'Hoàn tất',
+  Absent: 'Vắng mặt',
+  Cancelled: 'Đã huỷ',
 }
-
-const ROLE_COLOR = {
-  [ROLE.ADMIN]: 'bg-purple-500/20 text-purple-300',
-  [ROLE.BRANCH_MANAGER]: 'bg-blue-500/20 text-blue-300',
-  [ROLE.CASHIER]: 'bg-amber-500/20 text-amber-300',
-  [ROLE.WAREHOUSE]: 'bg-green-500/20 text-green-300',
+const STATUS_CLASS = {
+  Assigned: 'bg-amber-50 text-amber-700 border-amber-200',
+  Done: 'bg-green-50 text-green-700 border-green-200',
+  Absent: 'bg-red-50 text-red-700 border-red-200',
+  Cancelled: 'bg-gray-100 text-gray-600 border-gray-200',
 }
 
 function getMonday(date) {
@@ -37,77 +38,65 @@ function addDays(date, n) {
 }
 
 function dateKey(date) {
-  return date.toISOString().slice(0, 10)
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 10)
 }
 
-function formatDate(date) {
-  return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`
+function fmtDate(date) {
+  return new Date(date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
 }
 
-function formatTime(value) {
-  if (!value) return ''
-  return String(value).slice(0, 5)
+function fmtTime(value) {
+  return String(value || '').slice(0, 5)
 }
 
-function shiftColor(maCa, index = 0) {
-  if (maCa === 'CA001') return 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-  if (maCa === 'CA002') return 'bg-blue-500/10 border-blue-500/30 text-blue-300'
-  if (maCa === 'CA003') return 'bg-purple-500/10 border-purple-500/30 text-purple-300'
-  return [
-    'bg-amber-500/10 border-amber-500/30 text-amber-300',
-    'bg-blue-500/10 border-blue-500/30 text-blue-300',
-    'bg-purple-500/10 border-purple-500/30 text-purple-300',
-  ][index % 3]
-}
-
-function normalizeShift(item, index = 0) {
+function normalizeShift(item = {}) {
   return {
     id: item.MaCa || item.maca,
     label: item.TenCa || item.tenca,
-    time: `${formatTime(item.GioBatDau || item.giobatdau)}–${formatTime(item.GioKetThuc || item.gioketthuc)}`,
-    color: shiftColor(item.MaCa || item.maca, index),
+    time: `${fmtTime(item.GioBatDau || item.giobatdau)} – ${fmtTime(item.GioKetThuc || item.gioketthuc)}`,
   }
 }
 
-function normalizeEmployee(item) {
+function normalizeBranch(item = {}) {
+  return {
+    MaCN: item.MaCN || item.macn,
+    TenCN: item.TenCN || item.tencn,
+  }
+}
+
+function normalizeEmployee(item = {}) {
   return {
     MaNV: item.MaNV || item.manv,
     HoTen: item.HoTen || item.hoten,
+    MaCN: item.MaCN || item.macn || '',
+    TenCN: item.TenCN || item.tencn || '',
     VaiTro: normalizeRole(item.VaiTro || item.vaitro),
   }
 }
 
-function normalizeAssignment(item) {
+function normalizeAssignment(item = {}) {
   return {
     MaPC: String(item.MaPC || item.mapc),
     MaNV: item.MaNV || item.manv,
     HoTen: item.HoTen || item.hoten,
-    NgayLam: String(item.NgayLam || item.ngaylam).slice(0, 10),
-    MaCa: item.MaCa || item.maca,
-    GioBatDau: formatTime(item.GioBatDau || item.giobatdau),
-    GioKetThuc: formatTime(item.GioKetThuc || item.gioketthuc),
-    TrangThai: item.TrangThai || item.trangthai || 'Scheduled',
+    MaCN: item.MaCN || item.macn,
+    TenCN: item.TenCN || item.tencn || '',
+    NgayLam: String(item.NgayLam || item.ngaylam || item.Ngay || item.ngay).slice(0, 10),
+    MaCa: item.MaCa || item.maca || item.MaCL || item.macl,
+    TenCa: item.TenCa || item.tenca || '',
+    GioBatDau: fmtTime(item.GioBatDau || item.giobatdau),
+    GioKetThuc: fmtTime(item.GioKetThuc || item.gioketthuc),
+    TrangThai: item.TrangThai || item.trangthai || 'Assigned',
   }
 }
 
-function NVChip({ nv, onRemove, canEdit }) {
+function SummaryCard({ label, value, hint }) {
   return (
-    <div className="flex items-center gap-1.5 bg-surface rounded-md px-2 py-1 text-xs group">
-      <div className="w-5 h-5 rounded-full bg-brand-500/20 flex items-center justify-center shrink-0">
-        <span className="text-brand-400 text-[9px] font-bold">{nv.HoTen.charAt(0)}</span>
-      </div>
-      <span className="text-gray-200 truncate max-w-[80px]">{nv.HoTen}</span>
-      <span className={clsx('text-[9px] px-1 py-0.5 rounded font-medium shrink-0', ROLE_COLOR[nv.VaiTro] || 'bg-white/10 text-gray-300')}>
-        {ROLE_LABEL[nv.VaiTro] || nv.VaiTro || 'Nhân viên'}
-      </span>
-      {canEdit && (
-        <button
-          onClick={onRemove}
-          className="text-gray-600 hover:text-red-400 transition-colors ml-0.5 shrink-0"
-        >
-          <X size={10} />
-        </button>
-      )}
+    <div className="card p-4">
+      <p className="text-xs font-medium text-gray-500">{label}</p>
+      <p className="mt-1 text-xl font-bold text-gray-900">{value}</p>
+      <p className="mt-1 text-xs text-gray-400">{hint}</p>
     </div>
   )
 }
@@ -115,100 +104,150 @@ function NVChip({ nv, onRemove, canEdit }) {
 export default function PhanCong() {
   const user = useAuthStore((s) => s.user)
   const role = normalizeRole(user?.vaiTro)
+
   const canEdit = [ROLE.ADMIN, ROLE.BRANCH_MANAGER].includes(role)
+  const canPickBranch = [ROLE.ADMIN, ROLE.OPS_DIRECTOR].includes(role)
 
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()))
-  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
-
+  const [branches, setBranches] = useState([])
   const [shifts, setShifts] = useState([])
   const [employees, setEmployees] = useState([])
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState('calendar')
+  const [saving, setSaving] = useState(false)
   const [showModal, setShowModal] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [form, setForm] = useState({ NgayLam: dateKey(new Date()), MaCa: '', MaNV: '' })
-  const [filterNV, setFilterNV] = useState('')
+  const [branchFilter, setBranchFilter] = useState('ALL')
+  const [employeeFilter, setEmployeeFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [form, setForm] = useState({ MaCN: user?.maCN || '', NgayLam: dateKey(new Date()), MaCa: '', MaNV: '' })
 
-  const loadMeta = useCallback(async () => {
+  const selectedBranch = branchFilter === 'ALL' ? '' : branchFilter
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
+  const weekLabel = `${fmtDate(weekDays[0])} – ${fmtDate(weekDays[6])}/${weekDays[6].getFullYear()}`
+
+  const loadBranches = useCallback(async () => {
+    if (!canPickBranch) return
     try {
-      const [shiftRes, employeeRes] = await Promise.all([
-        api.get('/phan-cong/ca-lam'),
-        api.get('/nhan-vien', { params: { trangThai: 'Active' } }),
-      ])
-      const normalizedShifts = (shiftRes.data || []).map((item, index) => normalizeShift(item, index))
-      setShifts(normalizedShifts)
-      setEmployees((employeeRes.data || []).map(normalizeEmployee))
-      setForm((prev) => ({ ...prev, MaCa: prev.MaCa || normalizedShifts[0]?.id || '' }))
+      const res = await api.get('/chi-nhanh')
+      setBranches((res.data || []).map(normalizeBranch))
     } catch (err) {
-      toast.error(err.message || 'Không tải được dữ liệu phân công')
+      toast.error(err.message || 'Không tải được danh sách chi nhánh')
+    }
+  }, [canPickBranch])
+
+  const loadShifts = useCallback(async () => {
+    try {
+      const res = await api.get('/phan-cong/ca-lam')
+      const items = (res.data || []).map(normalizeShift)
+      setShifts(items)
+      setForm((prev) => ({ ...prev, MaCa: prev.MaCa || items[0]?.id || '' }))
+    } catch (err) {
+      toast.error(err.message || 'Không tải được ca làm')
     }
   }, [])
 
-  const loadAssignments = useCallback(async () => {
+  const loadEmployees = useCallback(async () => {
+    try {
+      const params = { trangThai: 'Active' }
+      const targetBranch = canPickBranch ? selectedBranch : user?.maCN
+      if (targetBranch) params.maCN = targetBranch
+
+      const res = await api.get('/nhan-vien', { params })
+      setEmployees((res.data || []).map(normalizeEmployee))
+    } catch (err) {
+      toast.error(err.message || 'Không tải được danh sách nhân viên')
+    }
+  }, [canPickBranch, selectedBranch, user?.maCN])
+
+  const loadAssignments = useCallback(async (showToast = false) => {
     setLoading(true)
     try {
-      const res = await api.get('/phan-cong', { params: { tuan: dateKey(weekStart) } })
+      const params = { tuan: dateKey(weekStart) }
+      const targetBranch = canPickBranch ? selectedBranch : user?.maCN
+      if (targetBranch) params.maCN = targetBranch
+      if (statusFilter) params.trangThai = statusFilter
+
+      const res = await api.get('/phan-cong', { params })
       setRecords((res.data || []).map(normalizeAssignment))
+      if (showToast) toast.success('Đã làm mới lịch phân công')
     } catch (err) {
       toast.error(err.message || 'Không tải được lịch phân công')
     } finally {
       setLoading(false)
     }
-  }, [weekStart])
+  }, [canPickBranch, selectedBranch, statusFilter, user?.maCN, weekStart])
 
   useEffect(() => {
-    loadMeta()
-  }, [loadMeta])
+    loadBranches()
+    loadShifts()
+  }, [loadBranches, loadShifts])
+
+  useEffect(() => {
+    loadEmployees()
+  }, [loadEmployees])
 
   useEffect(() => {
     loadAssignments()
   }, [loadAssignments])
 
-  const weekLabel = `${formatDate(weekDays[0])} – ${formatDate(weekDays[6])}/${weekDays[6].getFullYear()}`
-  const nvMap = useMemo(() => Object.fromEntries(employees.map((n) => [n.MaNV, n])), [employees])
+  const tableRecords = useMemo(() => (
+    records.filter((item) => {
+      if (!employeeFilter.trim()) return true
+      const q = employeeFilter.trim().toLowerCase()
+      return item.HoTen.toLowerCase().includes(q) || item.MaNV.toLowerCase().includes(q)
+    })
+  ), [employeeFilter, records])
+
+  const weekKeys = weekDays.map(dateKey)
+  const weekRecords = tableRecords.filter((item) => weekKeys.includes(item.NgayLam))
 
   const cellMap = useMemo(() => {
     const map = {}
-    records.forEach((record) => {
-      const key = `${record.NgayLam}_${record.MaCa}`
+    weekRecords.forEach((item) => {
+      const key = `${item.NgayLam}_${item.MaCa}`
       if (!map[key]) map[key] = []
-      map[key].push(record)
+      map[key].push(item)
     })
     return map
-  }, [records])
+  }, [weekRecords])
 
-  const filteredEmployees = useMemo(() => {
-    const q = filterNV.trim().toLowerCase()
-    if (!q) return employees
-    return employees.filter((nv) => nv.HoTen.toLowerCase().includes(q) || nv.MaNV.toLowerCase().includes(q))
-  }, [employees, filterNV])
+  const assignedEmployees = new Set(weekRecords.map((item) => item.MaNV)).size
+  const selectedBranchLabel = selectedBranch
+    ? branches.find((item) => item.MaCN === selectedBranch)?.TenCN || 'Chi nhánh'
+    : user?.tenCN || 'Toàn hệ thống'
 
-  const weekKeys = weekDays.map(dateKey)
-  const weekRecords = records.filter((r) => weekKeys.includes(r.NgayLam))
-  const assignedNV = new Set(weekRecords.map((r) => r.MaNV)).size
-  const totalSlots = weekRecords.length
+  const openCreateModal = (day = dateKey(new Date()), shiftId = shifts[0]?.id || '') => {
+    setForm({
+      MaCN: canPickBranch ? selectedBranch : user?.maCN || '',
+      NgayLam: day,
+      MaCa: shiftId,
+      MaNV: '',
+    })
+    setEmployeeFilter('')
+    setShowModal(true)
+  }
 
-  const handleAdd = async () => {
-    if (!form.MaNV || !form.MaCa || !form.NgayLam) return
-    setSubmitting(true)
+  const handleCreate = async () => {
+    if (!form.MaNV || !form.MaCa || !form.NgayLam || !(form.MaCN || user?.maCN)) return
+    setSaving(true)
     try {
-      const res = await api.post('/phan-cong', form)
-      toast.success(res.message || 'Thêm phân công thành công')
+      const res = await api.post('/phan-cong', {
+        ...form,
+        MaCN: form.MaCN || user?.maCN,
+      })
+      toast.success(res.message || 'Đã thêm phân công')
       setShowModal(false)
-      setFilterNV('')
-      setForm({ NgayLam: dateKey(new Date()), MaCa: shifts[0]?.id || '', MaNV: '' })
       await loadAssignments()
     } catch (err) {
       toast.error(err.message || 'Không thêm được phân công')
     } finally {
-      setSubmitting(false)
+      setSaving(false)
     }
   }
 
-  const handleRemove = async (MaPC) => {
+  const handleRemove = async (maPC) => {
     try {
-      const res = await api.delete(`/phan-cong/${MaPC}`)
+      const res = await api.delete(`/phan-cong/${maPC}`)
       toast.success(res.message || 'Đã xoá phân công')
       await loadAssignments()
     } catch (err) {
@@ -216,123 +255,188 @@ export default function PhanCong() {
     }
   }
 
+  const exportRows = tableRecords.map((item) => ({
+    ...item,
+    VaiTro: ROLE_LABEL[employees.find((employee) => employee.MaNV === item.MaNV)?.VaiTro] || '',
+    KhungGio: `${item.GioBatDau} - ${item.GioKetThuc}`,
+    TrangThaiHienThi: STATUS_LABEL[item.TrangThai] || item.TrangThai,
+  }))
+
   return (
-    <div className="p-6 space-y-5">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <CalendarDays size={22} className="text-brand-400" />
-            Phân công Ca làm việc
-          </h1>
-          <p className="text-gray-500 text-sm mt-0.5">Quản lý lịch ca theo tuần cho chi nhánh</p>
+          <h1 className="text-xl font-bold text-gray-900">Phân công ca làm việc</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Theo dõi lịch tuần theo chi nhánh, ca làm và nhân sự phụ trách.
+          </p>
         </div>
-        {canEdit && (
+
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-medium transition-colors"
+            onClick={() => loadAssignments(true)}
+            className="btn-secondary px-3 py-2 text-sm"
+            disabled={loading}
           >
-            <Plus size={16} />
-            Thêm phân công
+            <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
+            Làm mới
           </button>
-        )}
-      </div>
-
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Tổng ca tuần này', value: totalSlots, sub: `${weekRecords.filter((r) => r.MaCa === shifts[0]?.id).length} ca 1 · ${weekRecords.filter((r) => r.MaCa === shifts[1]?.id).length} ca 2 · ${weekRecords.filter((r) => r.MaCa === shifts[2]?.id).length} ca 3` },
-          { label: 'Nhân viên được phân công', value: assignedNV, sub: `/${employees.length} nhân viên` },
-          { label: 'Tuần xem', value: weekLabel, sub: 'Tuần đang chọn', isText: true },
-        ].map((k) => (
-          <div key={k.label} className="bg-surface rounded-xl p-4 border border-white/5">
-            <p className="text-gray-500 text-xs">{k.label}</p>
-            <p className={clsx('font-bold mt-1', k.isText ? 'text-base text-brand-400' : 'text-2xl text-white')}>{k.value}</p>
-            <p className="text-gray-600 text-xs mt-0.5">{k.sub}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex items-center justify-between">
-        <div className="flex gap-1 bg-surface rounded-lg p-1 border border-white/5">
-          {[['calendar', 'Lịch tuần'], ['list', 'Danh sách']].map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              className={clsx('px-4 py-1.5 rounded-md text-sm font-medium transition-colors', tab === id ? 'bg-brand-500 text-white' : 'text-gray-400 hover:text-white')}
-            >
-              {label}
+          <button
+            onClick={() => exportExcel('phan-cong-ca', 'Phân công', [
+              { label: 'Ngày', value: 'NgayLam' },
+              { label: 'Chi nhánh', value: 'TenCN' },
+              { label: 'Ca', value: 'TenCa' },
+              { label: 'Khung giờ', value: 'KhungGio' },
+              { label: 'Mã nhân viên', value: 'MaNV' },
+              { label: 'Nhân viên', value: 'HoTen' },
+              { label: 'Vai trò', value: 'VaiTro' },
+              { label: 'Trạng thái', value: 'TrangThaiHienThi' },
+            ], exportRows)}
+            className="btn-secondary px-3 py-2 text-sm"
+            disabled={exportRows.length === 0}
+          >
+            <Download size={14} />
+            Xuất báo cáo
+          </button>
+          {canEdit && (
+            <button onClick={() => openCreateModal()} className="btn-primary px-3 py-2 text-sm">
+              <Plus size={14} />
+              Thêm phân công
             </button>
-          ))}
+          )}
         </div>
+      </div>
 
-        {tab === 'calendar' && (
-          <div className="flex items-center gap-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <SummaryCard label="Tuần đang xem" value={weekLabel} hint={selectedBranchLabel} />
+        <SummaryCard label="Nhân viên đã xếp ca" value={assignedEmployees} hint={`${employees.length} nhân viên sẵn sàng`} />
+        <SummaryCard label="Tổng phân công" value={weekRecords.length} hint="Tính trên bộ lọc hiện tại" />
+      </div>
+
+      <div className="card space-y-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => setWeekStart((d) => addDays(d, -7))}
-              className="p-1.5 rounded-lg bg-surface border border-white/5 text-gray-400 hover:text-white transition-colors"
+              onClick={() => setWeekStart((prev) => addDays(prev, -7))}
+              className="btn-secondary h-10 w-10 px-0"
             >
               <ChevronLeft size={16} />
             </button>
-            <span className="text-sm text-gray-300 font-medium min-w-[140px] text-center">{weekLabel}</span>
+            <div className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600">
+              <CalendarDays size={15} className="text-gray-400" />
+              <span className="font-medium">{weekLabel}</span>
+            </div>
             <button
-              onClick={() => setWeekStart((d) => addDays(d, 7))}
-              className="p-1.5 rounded-lg bg-surface border border-white/5 text-gray-400 hover:text-white transition-colors"
+              onClick={() => setWeekStart((prev) => addDays(prev, 7))}
+              className="btn-secondary h-10 w-10 px-0"
             >
               <ChevronRight size={16} />
             </button>
           </div>
-        )}
-      </div>
 
-      {tab === 'calendar' && (
-        <div className="bg-surface rounded-xl border border-white/5 overflow-x-auto">
-          <table className="w-full min-w-[900px]">
-            <thead>
-              <tr className="border-b border-white/5">
-                <th className="w-28 text-left px-4 py-3 text-gray-500 text-xs font-semibold uppercase tracking-wider">Ca</th>
-                {weekDays.map((d, i) => {
-                  const isToday = dateKey(d) === dateKey(new Date())
+          <div className="flex flex-wrap items-center gap-2">
+            {canPickBranch && (
+              <select
+                value={branchFilter}
+                onChange={(e) => setBranchFilter(e.target.value)}
+                className="input min-w-52 text-sm"
+              >
+                <option value="ALL">Toàn hệ thống</option>
+                {branches.map((branch) => (
+                  <option key={branch.MaCN} value={branch.MaCN}>{branch.TenCN}</option>
+                ))}
+              </select>
+            )}
+
+            <div className="relative min-w-60 flex-1">
+              <Users size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={employeeFilter}
+                onChange={(e) => setEmployeeFilter(e.target.value)}
+                placeholder="Tìm theo mã hoặc tên nhân viên..."
+                className="input pl-9 text-sm"
+              />
+            </div>
+
+            <div className="relative">
+              <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="input min-w-44 pl-9 text-sm"
+              >
+                <option value="">Tất cả trạng thái</option>
+                {Object.entries(STATUS_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto rounded-2xl border border-gray-100">
+          <table className="min-w-[980px] w-full">
+            <thead className="bg-gray-50">
+              <tr className="border-b border-gray-100">
+                <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Ca làm</th>
+                {weekDays.map((day, index) => {
+                  const key = dateKey(day)
+                  const isToday = key === dateKey(new Date())
                   return (
-                    <th key={i} className={clsx('text-center px-2 py-3 text-xs font-semibold uppercase tracking-wider', isToday ? 'text-brand-400' : 'text-gray-500')}>
-                      <div>{DOW[i]}</div>
-                      <div className={clsx('text-base font-bold mt-0.5', isToday ? 'text-brand-400' : 'text-white')}>{d.getDate()}</div>
-                      {isToday && <div className="w-1.5 h-1.5 rounded-full bg-brand-500 mx-auto mt-0.5" />}
+                    <th key={key} className="px-3 py-3 text-left">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{DOW[index]}</p>
+                      <p className={clsx('mt-1 text-sm font-bold', isToday ? 'text-brand-600' : 'text-gray-800')}>
+                        {fmtDate(day)}
+                      </p>
                     </th>
                   )
                 })}
               </tr>
             </thead>
             <tbody>
-              {shifts.map((ca) => (
-                <tr key={ca.id} className="border-b border-white/5 last:border-0">
-                  <td className="px-4 py-3 align-top">
-                    <div className={clsx('inline-block px-2 py-1 rounded-lg border text-[11px] font-semibold', ca.color)}>
-                      {ca.label}
+              {shifts.map((shift) => (
+                <tr key={shift.id} className="border-b border-gray-100 last:border-0">
+                  <td className="px-4 py-4 align-top">
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                      <p className="text-sm font-semibold text-gray-800">{shift.label}</p>
+                      <p className="mt-1 text-xs text-gray-500">{shift.time}</p>
                     </div>
-                    <div className="text-gray-600 text-[10px] mt-1">{ca.time}</div>
                   </td>
-                  {weekDays.map((d, i) => {
-                    const key = `${dateKey(d)}_${ca.id}`
-                    const cell = cellMap[key] || []
+                  {weekDays.map((day) => {
+                    const key = `${dateKey(day)}_${shift.id}`
+                    const items = cellMap[key] || []
                     return (
-                      <td key={i} className="px-2 py-2 align-top min-h-[70px]">
-                        <div className="space-y-1 min-h-[56px]">
-                          {cell.map((r) => (
-                            <NVChip
-                              key={r.MaPC}
-                              nv={nvMap[r.MaNV] || { HoTen: r.HoTen, VaiTro: ROLE.CASHIER }}
-                              canEdit={canEdit}
-                              onRemove={() => handleRemove(r.MaPC)}
-                            />
+                      <td key={key} className="px-3 py-3 align-top">
+                        <div className="min-h-28 space-y-2">
+                          {items.map((item) => (
+                            <div key={item.MaPC} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-gray-800 truncate">{item.HoTen}</p>
+                                  <p className="mt-1 text-[11px] text-gray-500">{item.MaNV}</p>
+                                  {canPickBranch && <p className="mt-1 text-[11px] text-gray-400">{item.TenCN}</p>}
+                                </div>
+                                <span className={clsx('rounded-full border px-2 py-0.5 text-[10px] font-semibold', STATUS_CLASS[item.TrangThai] || STATUS_CLASS.Assigned)}>
+                                  {STATUS_LABEL[item.TrangThai] || item.TrangThai}
+                                </span>
+                              </div>
+                              {canEdit && (
+                                <button
+                                  onClick={() => handleRemove(item.MaPC)}
+                                  className="mt-3 text-xs font-medium text-red-500 hover:text-red-600"
+                                >
+                                  Xoá phân công
+                                </button>
+                              )}
+                            </div>
                           ))}
-                          {canEdit && cell.length === 0 && (
+                          {canEdit && items.length === 0 && (
                             <button
-                              onClick={() => {
-                                setForm({ NgayLam: dateKey(d), MaCa: ca.id, MaNV: '' })
-                                setShowModal(true)
-                              }}
-                              className="w-full h-8 border border-dashed border-white/10 rounded-md text-gray-700 hover:border-brand-500/40 hover:text-brand-500 transition-colors flex items-center justify-center"
+                              onClick={() => openCreateModal(dateKey(day), shift.id)}
+                              className="flex h-28 w-full items-center justify-center rounded-xl border border-dashed border-gray-300 text-sm font-medium text-gray-500 hover:border-brand-300 hover:text-brand-600"
                             >
-                              <Plus size={12} />
+                              <Plus size={14} className="mr-1" />
+                              Thêm ca
                             </button>
                           )}
                         </div>
@@ -343,159 +447,156 @@ export default function PhanCong() {
               ))}
             </tbody>
           </table>
-          {loading && <div className="p-4 text-center text-gray-500 text-sm">Đang tải lịch phân công...</div>}
         </div>
-      )}
+      </div>
 
-      {tab === 'list' && (
-        <div className="bg-surface rounded-xl border border-white/5 overflow-hidden">
-          <div className="p-4 border-b border-white/5 flex items-center gap-3">
-            <Users size={15} className="text-gray-500" />
-            <span className="text-sm text-gray-400">Tất cả phân công ({records.length} bản ghi)</span>
+      <div className="card overflow-hidden p-0">
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-800">Danh sách phân công</h2>
+            <p className="mt-1 text-xs text-gray-400">Bảng chi tiết theo bộ lọc hiện tại</p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b border-white/5">
-                <tr>
-                  {['Mã PC', 'Ngày', 'Ca', 'Nhân viên', 'Vai trò', 'Giờ làm', 'Trạng thái'].map((h) => (
-                    <th key={h} className="text-left px-4 py-3 text-gray-500 text-xs font-semibold uppercase tracking-wider">{h}</th>
-                  ))}
-                  {canEdit && <th className="px-4 py-3" />}
-                </tr>
-              </thead>
-              <tbody>
-                {records
-                  .slice()
-                  .sort((a, b) => b.NgayLam.localeCompare(a.NgayLam))
-                  .map((r) => {
-                    const ca = shifts.find((c) => c.id === r.MaCa)
-                    const nv = nvMap[r.MaNV] || {}
-                    return (
-                      <tr key={r.MaPC} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors">
-                        <td className="px-4 py-3 text-gray-500 text-xs font-mono">{r.MaPC}</td>
-                        <td className="px-4 py-3 text-gray-300">{r.NgayLam}</td>
-                        <td className="px-4 py-3">
-                          <span className={clsx('text-xs px-2 py-0.5 rounded-full border font-medium', ca?.color)}>
-                            {ca?.label}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-white font-medium">{r.HoTen}</td>
-                        <td className="px-4 py-3">
-                          <span className={clsx('text-xs px-1.5 py-0.5 rounded font-medium', ROLE_COLOR[nv.VaiTro] || 'bg-white/10 text-gray-300')}>
-                            {ROLE_LABEL[nv.VaiTro] || 'Nhân viên'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-gray-400 text-xs">{r.GioBatDau} – {r.GioKetThuc}</td>
-                        <td className="px-4 py-3 text-gray-500 text-xs">{r.TrangThai}</td>
-                        {canEdit && (
-                          <td className="px-4 py-3">
-                            <button onClick={() => handleRemove(r.MaPC)} className="text-gray-600 hover:text-red-400 transition-colors">
-                              <X size={14} />
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    )
-                  })}
-              </tbody>
-            </table>
-            {!loading && records.length === 0 && (
-              <div className="text-center py-12 text-gray-600">Chưa có phân công nào</div>
-            )}
-          </div>
+          <span className="text-xs font-medium text-gray-500">{tableRecords.length} bản ghi</span>
         </div>
-      )}
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr className="border-b border-gray-100">
+                {['Ngày', 'Ca', 'Khung giờ', 'Nhân viên', ...(canPickBranch ? ['Chi nhánh'] : []), 'Trạng thái'].map((label) => (
+                  <th key={label} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</th>
+                ))}
+                {canEdit && <th className="px-5 py-3" />}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={canPickBranch ? 7 : 6} className="px-5 py-10 text-center text-sm text-gray-400">
+                    <RefreshCw size={16} className="mr-2 inline animate-spin" />
+                    Đang tải dữ liệu phân công...
+                  </td>
+                </tr>
+              ) : tableRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={canPickBranch ? 7 : 6} className="px-5 py-10 text-center text-sm text-gray-400">
+                    Chưa có phân công nào khớp bộ lọc.
+                  </td>
+                </tr>
+              ) : (
+                tableRecords
+                  .slice()
+                  .sort((a, b) => `${a.NgayLam}${a.GioBatDau}`.localeCompare(`${b.NgayLam}${b.GioBatDau}`))
+                  .map((item) => (
+                    <tr key={item.MaPC} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/80">
+                      <td className="px-5 py-4 text-gray-700">{item.NgayLam}</td>
+                      <td className="px-5 py-4 font-medium text-gray-800">{item.TenCa || item.MaCa}</td>
+                      <td className="px-5 py-4 text-gray-500">{item.GioBatDau} – {item.GioKetThuc}</td>
+                      <td className="px-5 py-4">
+                        <p className="font-medium text-gray-800">{item.HoTen}</p>
+                        <p className="text-xs text-gray-400">{item.MaNV}</p>
+                      </td>
+                      {canPickBranch && <td className="px-5 py-4 text-gray-600">{item.TenCN}</td>}
+                      <td className="px-5 py-4">
+                        <span className={clsx('rounded-full border px-2.5 py-1 text-xs font-semibold', STATUS_CLASS[item.TrangThai] || STATUS_CLASS.Assigned)}>
+                          {STATUS_LABEL[item.TrangThai] || item.TrangThai}
+                        </span>
+                      </td>
+                      {canEdit && (
+                        <td className="px-5 py-4 text-right">
+                          <button onClick={() => handleRemove(item.MaPC)} className="text-sm font-medium text-red-500 hover:text-red-600">
+                            Xoá
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-sidebar rounded-2xl border border-white/10 w-full max-w-md shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-              <h3 className="text-white font-bold text-base">Thêm phân công ca</h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-white transition-colors">
-                <X size={18} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Tạo phân công mới</h3>
+                <p className="mt-1 text-xs text-gray-400">Chọn ngày, ca và nhân viên phù hợp.</p>
+              </div>
+              <button onClick={() => setShowModal(false)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                <X size={16} />
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="grid gap-4 px-6 py-5 md:grid-cols-2">
+              {canPickBranch && (
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-semibold text-gray-600">Chi nhánh</label>
+                  <select
+                    value={form.MaCN}
+                    onChange={(e) => setForm((prev) => ({ ...prev, MaCN: e.target.value, MaNV: '' }))}
+                    className="input text-sm"
+                  >
+                    <option value="">-- Chọn chi nhánh --</option>
+                    {branches.map((branch) => (
+                      <option key={branch.MaCN} value={branch.MaCN}>{branch.TenCN}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
-                <label className="block text-xs text-gray-400 font-medium mb-1.5">Ngày làm việc</label>
+                <label className="mb-1 block text-xs font-semibold text-gray-600">Ngày làm việc</label>
                 <input
                   type="date"
                   value={form.NgayLam}
-                  onChange={(e) => setForm((f) => ({ ...f, NgayLam: e.target.value }))}
-                  className="w-full bg-surface border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  onChange={(e) => setForm((prev) => ({ ...prev, NgayLam: e.target.value }))}
+                  className="input text-sm"
                 />
               </div>
 
               <div>
-                <label className="block text-xs text-gray-400 font-medium mb-1.5">Ca làm việc</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {shifts.map((ca) => (
-                    <button
-                      key={ca.id}
-                      onClick={() => setForm((f) => ({ ...f, MaCa: ca.id }))}
-                      className={clsx(
-                        'px-3 py-2 rounded-lg border text-xs font-medium transition-colors text-center',
-                        form.MaCa === ca.id ? `${ca.color} border-current` : 'border-white/10 text-gray-500 hover:border-white/20'
-                      )}
-                    >
-                      <div>{ca.label}</div>
-                      <div className="text-[10px] opacity-70 mt-0.5">{ca.time}</div>
-                    </button>
+                <label className="mb-1 block text-xs font-semibold text-gray-600">Ca làm việc</label>
+                <select
+                  value={form.MaCa}
+                  onChange={(e) => setForm((prev) => ({ ...prev, MaCa: e.target.value }))}
+                  className="input text-sm"
+                >
+                  {shifts.map((shift) => (
+                    <option key={shift.id} value={shift.id}>{shift.label} · {shift.time}</option>
                   ))}
-                </div>
+                </select>
               </div>
 
-              <div>
-                <label className="block text-xs text-gray-400 font-medium mb-1.5">Nhân viên</label>
-                <input
-                  type="text"
-                  placeholder="Tìm tên nhân viên..."
-                  value={filterNV}
-                  onChange={(e) => setFilterNV(e.target.value)}
-                  className="w-full bg-surface border border-white/10 rounded-lg px-3 py-2 text-white text-sm mb-2 focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-gray-600"
-                />
-                <div className="space-y-1 max-h-40 overflow-y-auto">
-                  {filteredEmployees.map((nv) => (
-                    <button
-                      key={nv.MaNV}
-                      onClick={() => setForm((f) => ({ ...f, MaNV: nv.MaNV }))}
-                      className={clsx(
-                        'w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors text-left',
-                        form.MaNV === nv.MaNV ? 'border-brand-500 bg-brand-500/10' : 'border-white/5 hover:bg-white/5'
-                      )}
-                    >
-                      <div className="w-7 h-7 rounded-full bg-brand-500/20 flex items-center justify-center shrink-0">
-                        <span className="text-brand-400 text-xs font-bold">{nv.HoTen.charAt(0)}</span>
-                      </div>
-                      <div>
-                        <p className="text-white text-sm font-medium">{nv.HoTen}</p>
-                        <p className="text-gray-500 text-xs">{ROLE_LABEL[nv.VaiTro] || 'Nhân viên'}</p>
-                      </div>
-                      {form.MaNV === nv.MaNV && (
-                        <div className="ml-auto w-4 h-4 rounded-full bg-brand-500 flex items-center justify-center">
-                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-semibold text-gray-600">Nhân viên</label>
+                <select
+                  value={form.MaNV}
+                  onChange={(e) => setForm((prev) => ({ ...prev, MaNV: e.target.value }))}
+                  className="input text-sm"
+                >
+                  <option value="">-- Chọn nhân viên --</option>
+                  {employees
+                    .filter((item) => !form.MaCN || item.MaCN === form.MaCN)
+                    .map((employee) => (
+                      <option key={employee.MaNV} value={employee.MaNV}>
+                        {employee.HoTen} · {employee.MaNV}
+                      </option>
+                    ))}
+                </select>
               </div>
             </div>
 
-            <div className="px-6 pb-6 flex gap-3">
+            <div className="flex gap-3 px-6 pb-6">
+              <button onClick={() => setShowModal(false)} className="btn-secondary flex-1">Huỷ</button>
               <button
-                onClick={() => setShowModal(false)}
-                className="flex-1 px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg text-sm transition-colors"
+                onClick={handleCreate}
+                disabled={saving || !form.MaCN || !form.MaNV || !form.MaCa || !form.NgayLam}
+                className="btn-primary flex-1"
               >
-                Huỷ
-              </button>
-              <button
-                onClick={handleAdd}
-                disabled={!form.MaNV || !form.MaCa || submitting}
-                className="flex-1 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                {submitting ? 'Đang lưu...' : 'Thêm phân công'}
+                {saving ? 'Đang lưu...' : 'Lưu phân công'}
               </button>
             </div>
           </div>

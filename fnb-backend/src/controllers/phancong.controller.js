@@ -16,13 +16,14 @@ const getDanhSachCa = async (req, res, next) => {
 
 const getPhanCong = async (req, res, next) => {
   try {
-    const { tuan, maNV } = req.query;
+    const { tuan, maNV, trangThai } = req.query;
     const maCN = req.user.maCN || req.query.maCN;
     const params = [];
     const conds = [];
 
     if (maCN) { params.push(maCN); conds.push(`pc.MaCN = $${params.length}`); }
     if (maNV) { params.push(maNV); conds.push(`pc.MaNV = $${params.length}`); }
+    if (trangThai) { params.push(trangThai); conds.push(`pc.TrangThai = $${params.length}`); }
     if (tuan) {
       params.push(tuan); conds.push(`pc.Ngay >= $${params.length}::DATE`);
       params.push(tuan); conds.push(`pc.Ngay < ($${params.length}::DATE + INTERVAL '7 days')`);
@@ -31,12 +32,13 @@ const getPhanCong = async (req, res, next) => {
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
     const { rows } = await db.query(
       `SELECT pc.MaNV, pc.MaCN, pc.MaCL, pc.Ngay, pc.TrangThai,
-              nv.HoTen, cl.TenCL AS TenCa, cl.GioBatDau, cl.GioKetThuc
+              nv.HoTen, cn.TenCN, cl.TenCL AS TenCa, cl.GioBatDau, cl.GioKetThuc
        FROM PHANCONG pc
        JOIN NHANVIEN nv ON nv.MaNV = pc.MaNV
+       JOIN CHINHANH cn ON cn.MaCN = pc.MaCN
        JOIN CALAM cl ON cl.MaCL = pc.MaCL
        ${where}
-       ORDER BY pc.Ngay, cl.GioBatDau`,
+       ORDER BY pc.Ngay, cn.TenCN, cl.GioBatDau, nv.HoTen`,
       params
     );
 

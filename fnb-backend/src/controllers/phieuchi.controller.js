@@ -1,6 +1,32 @@
 const db = require('../config/db');
 const { genMa } = require('../utils/magen');
-const { success } = require('../utils/response');
+const { success, error } = require('../utils/response');
+
+const EXPENSE_TYPE_MAP = {
+  Electricity: 'Điện',
+  Water: 'Nước',
+  Internet: 'Internet',
+  Premises: 'Mặt bằng',
+  'Maintenance & Repair': 'Bảo trì',
+  'Marketing & Advertising': 'Marketing',
+  'Taxes & Fees': 'Thuế & phí',
+  'Other expenses': 'Khác',
+};
+
+const EXPENSE_TYPE_INPUT = {
+  Điện: 'Electricity',
+  Nước: 'Water',
+  Internet: 'Internet',
+  'Mặt bằng': 'Premises',
+  'Bảo trì': 'Maintenance & Repair',
+  Marketing: 'Marketing & Advertising',
+  'Thuế & phí': 'Taxes & Fees',
+  Khác: 'Other expenses',
+};
+
+function normalizeLoaiChi(value) {
+  return EXPENSE_TYPE_INPUT[value] || value;
+}
 
 const getAll = async (req, res, next) => {
   try {
@@ -25,8 +51,13 @@ const getAll = async (req, res, next) => {
       params
     );
 
-    const tongSoTien = rows.reduce((sum, r) => sum + parseFloat(r.sotien || 0), 0);
-    return success(res, { items: rows, tongSoTien });
+    const normalized = rows.map((row) => ({
+      ...row,
+      LoaiChiHienThi: EXPENSE_TYPE_MAP[row.loaichi] || row.LoaiChi || row.loaichi,
+    }));
+
+    const tongSoTien = normalized.reduce((sum, r) => sum + parseFloat(r.sotien || 0), 0);
+    return success(res, { items: normalized, tongSoTien });
   } catch (err) { next(err); }
 };
 
@@ -35,11 +66,14 @@ const create = async (req, res, next) => {
     const { MaCN, NgayChi, LoaiChi, SoTien, MoTa } = req.body;
     const MaPC = genMa('PC');
     const maCN = MaCN || req.user.maCN;
+    const loaiChiDb = normalizeLoaiChi(LoaiChi);
+
+    if (!maCN) return error(res, 'Không xác định được chi nhánh lập phiếu chi.', 400);
 
     await db.query(
       `INSERT INTO PHIEUCHI (MaPC, MaCN, MaNV, NgayChi, LoaiChi, SoTien, MoTa, TrangThai)
        VALUES ($1,$2,$3,$4,$5,$6,$7,'Pending')`,
-      [MaPC, maCN, req.user.maNV, NgayChi || new Date().toISOString(), LoaiChi, SoTien, MoTa || null]
+      [MaPC, maCN, req.user.maNV, NgayChi || new Date().toISOString(), loaiChiDb, SoTien, MoTa || null]
     );
     return success(res, { MaPC }, 'Tạo phiếu chi thành công', 201);
   } catch (err) { next(err); }

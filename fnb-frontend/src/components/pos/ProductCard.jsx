@@ -7,7 +7,7 @@ import { fmtCurrency } from '../../lib/format'
 import clsx from 'clsx'
 
 export default function ProductCard({ product, onAdd, inCart }) {
-  const isOutOfStock = product.TrangThai === 'Out of stock'
+  const isOutOfStock = product.TrangThai === 'Hết món'
 
   return (
     <button

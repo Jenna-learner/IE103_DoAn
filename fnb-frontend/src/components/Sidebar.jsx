@@ -52,6 +52,7 @@ const MENU = {
         { to: '/kho/ton-kho',        icon: Package,       label: 'Tồn kho' },
         { to: '/kho/nhat-ky',        icon: ClipboardList, label: 'Nhật ký kho' },
         { to: '/phieu-nhap',         icon: Truck,         label: 'Phiếu nhập hàng' },
+        { to: '/phan-cong',          icon: CalendarDays,  label: 'Phân công ca' },
         { to: '/phieu-chi',          icon: Receipt,       label: 'Phiếu chi' },
     ]},
   ],
@@ -83,10 +84,12 @@ const MENU = {
         { to: '/pos',                icon: ShoppingCart,  label: 'POS Bán hàng' },
         { to: '/hoa-don',            icon: FileText,      label: 'Lịch sử Hóa đơn' },
         { to: '/khach-hang',         icon: Users,         label: 'Khách hàng CRM' },
+        { to: '/phieu-chi',          icon: Receipt,       label: 'Phiếu chi' },
     ]},
     { group: 'Tham khảo kho', items: [
         { to: '/kho/ton-kho',        icon: Package,       label: 'Tồn kho' },
         { to: '/kho/kiem-kho',       icon: ScanLine,      label: 'Kiểm kho' },
+        { to: '/phan-cong',          icon: CalendarDays,  label: 'Phân công ca' },
     ]},
   ],
   [ROLE.WAREHOUSE]: [
@@ -96,6 +99,8 @@ const MENU = {
         { to: '/kho/nhat-ky',        icon: ClipboardList, label: 'Nhật ký kho' },
         { to: '/kho/kiem-kho',       icon: ScanLine,      label: 'Kiểm kho' },
         { to: '/phieu-nhap',         icon: Truck,         label: 'Phiếu nhập hàng' },
+        { to: '/phieu-chi',          icon: Receipt,       label: 'Phiếu chi' },
+        { to: '/phan-cong',          icon: CalendarDays,  label: 'Phân công ca' },
     ]},
   ],
 }

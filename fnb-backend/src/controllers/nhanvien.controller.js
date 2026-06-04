@@ -11,7 +11,7 @@ const getAll = async (req, res, next) => {
 
     if (maCN) { params.push(maCN); conds.push(`nc.MaCN = $${params.length}`); }
     if (maBP) { params.push(maBP); conds.push(`nv.MaBP = $${params.length}`); }
-    if (trangThai) { params.push(trangThai); conds.push(`nv.TrangThai = $${params.length}`); }
+    if (trangThai && trangThai !== 'all') { params.push(trangThai); conds.push(`nv.TrangThai = $${params.length}`); }
 
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
 
@@ -56,6 +56,21 @@ const create = async (req, res, next) => {
     const { MaNV, HoTen, MaBP, SDT, Email, DonGiaCa, LuongCoBan, MaCN, TenDangNhap, MatKhau, VaiTro } = req.body;
     const luong = DonGiaCa || LuongCoBan;
 
+    const { rows: duplicated } = await client.query(
+      `SELECT 1
+       FROM NHANVIEN nv
+       LEFT JOIN TAIKHOAN tk ON tk.MaNV = nv.MaNV
+       WHERE nv.MaNV = $1
+          OR ($2 <> '' AND LOWER(COALESCE(nv.Email, '')) = LOWER($2))
+          OR ($3 <> '' AND LOWER(COALESCE(tk.TenDangNhap, '')) = LOWER($3))
+       LIMIT 1`,
+      [MaNV, Email || '', TenDangNhap || '']
+    );
+    if (duplicated.length > 0) {
+      await client.query('ROLLBACK');
+      return error(res, 'Mã nhân viên, email hoặc tên đăng nhập đã tồn tại.', 409);
+    }
+
     await client.query(
       `INSERT INTO NHANVIEN (MaNV, HoTen, MaBP, SDT, Email, DonGiaCa)
        VALUES ($1,$2,$3,$4,$5,$6)`,
@@ -82,6 +97,23 @@ const create = async (req, res, next) => {
 const update = async (req, res, next) => {
   try {
     const { HoTen, MaBP, SDT, Email, DonGiaCa, LuongCoBan, TrangThai } = req.body;
+
+    if (TrangThai === 'Inactive') {
+      const { rows: related } = await db.query(
+        `SELECT COUNT(*) FILTER (WHERE pc.TrangThai = 'Assigned' AND pc.Ngay >= CURRENT_DATE) AS pending_shifts
+         FROM NHANVIEN nv
+         LEFT JOIN PHANCONG pc ON pc.MaNV = nv.MaNV
+         WHERE nv.MaNV = $1
+         GROUP BY nv.MaNV`,
+        [req.params.maNV]
+      );
+
+      const pendingShifts = Number(related[0]?.pending_shifts || 0);
+      if (pendingShifts > 0) {
+        return error(res, 'Nhân viên đang có ca làm đã phân công trong tương lai. Vui lòng xử lý phân công trước khi ngưng hoạt động.', 409);
+      }
+    }
+
     await db.query(
       `UPDATE NHANVIEN SET HoTen=$1, MaBP=$2, SDT=$3, Email=$4, DonGiaCa=$5, TrangThai=$6, UpdatedAt=NOW() WHERE MaNV=$7`,
       [HoTen, MaBP, SDT, Email, DonGiaCa || LuongCoBan, TrangThai, req.params.maNV]
@@ -90,13 +122,4 @@ const update = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-const datLaiMatKhau = async (req, res, next) => {
-  try {
-    const { MatKhauMoi } = req.body;
-    const hash = await bcrypt.hash(MatKhauMoi, 10);
-    await db.query(`UPDATE TAIKHOAN SET MatKhau = $1, UpdatedAt=NOW() WHERE MaNV = $2`, [hash, req.params.maNV]);
-    return success(res, null, 'Đã đặt lại mật khẩu thành công');
-  } catch (err) { next(err); }
-};
-
-module.exports = { getAll, getById, create, update, datLaiMatKhau };
+module.exports = { getAll, getById, create, update };

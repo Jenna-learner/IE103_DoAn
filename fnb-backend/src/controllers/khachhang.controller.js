@@ -2,7 +2,6 @@ const db = require('../config/db');
 const { genMa } = require('../utils/magen');
 const { success, error, paginated } = require('../utils/response');
 
-// pg trả về lowercase → map sang PascalCase cho frontend
 const mapRow = (r) => ({
   MaKH:          r.makh,
   TenKH:         r.tenkh,
@@ -85,6 +84,18 @@ const getById = async (req, res, next) => {
 const create = async (req, res, next) => {
   try {
     const { TenKH, SDT, Email } = req.body;
+    const { rows: duplicated } = await db.query(
+      `SELECT 1
+       FROM KHACHHANG
+       WHERE ($1 <> '' AND SDT = $1)
+          OR ($2 <> '' AND LOWER(COALESCE(Email, '')) = LOWER($2))
+       LIMIT 1`,
+      [SDT || '', Email || '']
+    );
+    if (duplicated.length > 0) {
+      return error(res, 'Số điện thoại hoặc email khách hàng đã tồn tại.', 409);
+    }
+
     const MaKH = genMa('KH');
     await db.query(`INSERT INTO KHACHHANG (MaKH, HoTen, SDT, Email) VALUES ($1,$2,$3,$4)`, [MaKH, TenKH, SDT, Email]);
     return success(res, { MaKH, TenKH, SDT, HangThanhVien: 'Bronze', DiemTichLuy: 0 }, 'Đăng ký khách hàng thành công', 201);
@@ -94,6 +105,19 @@ const create = async (req, res, next) => {
 const update = async (req, res, next) => {
   try {
     const { TenKH, Email } = req.body;
+
+    const { rows: duplicated } = await db.query(
+      `SELECT 1
+       FROM KHACHHANG
+       WHERE MaKH <> $1
+         AND ($2 <> '' AND LOWER(COALESCE(Email, '')) = LOWER($2))
+       LIMIT 1`,
+      [req.params.maKH, Email || '']
+    );
+    if (duplicated.length > 0) {
+      return error(res, 'Email khách hàng đã tồn tại.', 409);
+    }
+
     await db.query(`UPDATE KHACHHANG SET HoTen=$1, Email=$2, UpdatedAt=NOW() WHERE MaKH=$3`, [TenKH, Email, req.params.maKH]);
     return success(res, null, 'Cập nhật thông tin khách hàng thành công');
   } catch (err) { next(err); }

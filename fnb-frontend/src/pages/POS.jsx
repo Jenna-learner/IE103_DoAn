@@ -38,7 +38,7 @@ function normalizeProduct(item) {
     MaSP: item.MaSP || item.masp,
     TenSP: item.TenSP || item.tensp,
     GiaBan: Number(item.GiaBan ?? item.giaban ?? 0),
-    TrangThai: item.TrangThai || item.trangthai || 'Active',
+    TrangThai: item.TrangThai || item.trangthai || 'Đang bán',
     MaLoai: item.MaLoai || item.maloai,
   }
 }
@@ -80,7 +80,7 @@ export default function POS() {
       try {
         const [categoryRes, productRes] = await Promise.all([
           api.get('/loai-san-pham'),
-          api.get('/san-pham', { params: { trangThai: 'Active', page: 1, limit: 500 } }),
+          api.get('/san-pham', { params: { trangThai: 'Đang bán', page: 1, limit: 500 } }),
         ])
         setCategories((categoryRes.data || []).map(normalizeCategory))
         setProducts((productRes.data || []).map(normalizeProduct))

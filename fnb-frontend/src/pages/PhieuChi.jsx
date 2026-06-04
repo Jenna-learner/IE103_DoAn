@@ -1,34 +1,53 @@
-/**
- * UI 09 — Phiếu Chi vận hành (/phieu-chi)
- * Roles: ALL (xem) | admin + giám đốc vận hành + quản lý chi nhánh (duyệt / từ chối)
- *
- * Tính năng:
- *  - Danh sách phiếu chi dạng bảng (kèm bộ lọc trạng thái + loại chi + tìm kiếm)
- *  - Tạo phiếu chi mới (inline form trong modal)
- *  - Duyệt / Từ chối phiếu theo role quản lý
- *  - Hủy phiếu do chính mình tạo (chỉ khi pending)
- *  - KPI: tổng chi tháng này, số phiếu chờ duyệt, tổng phiếu
- */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Receipt, Plus, X, Check, ChevronDown, Search } from 'lucide-react'
+import { CheckCircle2, Download, Plus, Receipt, RefreshCw, Search, XCircle } from 'lucide-react'
 import clsx from 'clsx'
-import api from '../lib/api'
-import useAuthStore from '../store/authStore'
 import toast from 'react-hot-toast'
+
+import api from '../lib/api'
+import { exportExcel } from '../lib/exportExcel'
+import useAuthStore from '../store/authStore'
 import { ROLE, normalizeRole } from '../lib/roles'
 
-// ─── Config ──────────────────────────────────────────────────────────────────
-const LOAI_CHI = ['Vận hành', 'Nguyên liệu', 'Lương', 'Bảo trì', 'Marketing', 'Khác']
+const EXPENSE_TYPES = [
+  { value: 'Electricity', label: 'Điện' },
+  { value: 'Water', label: 'Nước' },
+  { value: 'Internet', label: 'Internet' },
+  { value: 'Premises', label: 'Mặt bằng' },
+  { value: 'Maintenance & Repair', label: 'Bảo trì' },
+  { value: 'Marketing & Advertising', label: 'Marketing' },
+  { value: 'Taxes & Fees', label: 'Thuế & phí' },
+  { value: 'Other expenses', label: 'Khác' },
+]
 
-// TrangThai khớp DB CHECK: ('Pending', 'Approved', 'Rejected')
-const STATUS_CFG = {
-  Pending:  { label: 'Chờ duyệt', cls: 'bg-amber-500/15 text-amber-300 border border-amber-500/30' },
-  Approved: { label: 'Đã duyệt',  cls: 'bg-green-500/15 text-green-300 border border-green-500/30' },
-  Rejected: { label: 'Từ chối',   cls: 'bg-red-500/15 text-red-300 border border-red-500/30' },
+const STATUS_LABEL = {
+  Pending: 'Chờ duyệt',
+  Approved: 'Đã duyệt',
+  Rejected: 'Từ chối',
 }
 
-function fmt(n) {
-  return n?.toLocaleString('vi-VN') + ' ₫'
+const STATUS_CLASS = {
+  Pending: 'bg-amber-50 text-amber-700 border-amber-200',
+  Approved: 'bg-green-50 text-green-700 border-green-200',
+  Rejected: 'bg-red-50 text-red-700 border-red-200',
+}
+
+function fmtCurrency(value) {
+  return Number(value || 0).toLocaleString('vi-VN') + ' ₫'
+}
+
+function fmtDateTime(value) {
+  if (!value) return '—'
+  return new Date(value).toLocaleString('vi-VN', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
+function normalizeBranch(item = {}) {
+  return {
+    MaCN: item.MaCN || item.macn,
+    TenCN: item.TenCN || item.tencn,
+  }
 }
 
 function normalizeExpense(item = {}) {
@@ -36,463 +55,413 @@ function normalizeExpense(item = {}) {
     MaPC: item.MaPC || item.mapc,
     MaCN: item.MaCN || item.macn,
     TenCN: item.TenCN || item.tencn || '—',
-    LoaiChi: item.LoaiChi || item.loaichi || 'Khác',
+    LoaiChi: item.LoaiChi || item.loaichi || '',
+    LoaiChiHienThi: item.LoaiChiHienThi || item.loaichihienthi || item.LoaiChi || item.loaichi || 'Khác',
     SoTien: Number(item.SoTien ?? item.sotien ?? 0),
     MoTa: item.MoTa || item.mota || '',
     NgayChi: item.NgayChi || item.ngaychi || '',
     TrangThai: item.TrangThai || item.trangthai || 'Pending',
-    NguoiLap: item.TenNhanVienLap || item.NguoiLap || item.nguoilap || '—',
-    NguoiDuyet: item.NguoiDuyet || item.nguoiduyet || null,
-    NgayDuyet: item.NgayDuyet || item.ngayduyet || null,
-    LyDoTuChoi: item.LyDoTuChoi || item.lydotuchoi || null,
+    NguoiLap: item.TenNhanVienLap || item.tennhanvienlap || '—',
   }
 }
 
-// ─── Row component (accordion) ────────────────────────────────────────────────
-function PhieuRow({ pc, canApprove, currentUser, onApprove, onReject, onCancel }) {
-  const [open, setOpen] = useState(false)
-  const [lyDo, setLyDo] = useState('')
-  const [showRejectBox, setShowRejectBox] = useState(false)
-  const cfg = STATUS_CFG[pc.TrangThai] || STATUS_CFG.Pending
-  const canCancel = pc.NguoiLap === currentUser?.hoTen && pc.TrangThai === 'Pending'
-
+function KpiCard({ icon, label, value, hint }) {
   return (
-    <div className="border border-white/5 rounded-xl overflow-hidden bg-surface/50">
-      {/* Row header */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-4 px-5 py-4 hover:bg-white/[0.02] transition-colors text-left"
-      >
-        <div className="flex-1 min-w-0 grid grid-cols-5 gap-3 items-center">
-          <div>
-            <p className="text-xs text-gray-500 mb-0.5">Mã phiếu</p>
-            <p className="text-white text-sm font-mono font-medium">{pc.MaPC}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-0.5">Loại chi</p>
-            <p className="text-gray-200 text-sm">{pc.LoaiChi}</p>
-          </div>
-          <div className="col-span-2">
-            <p className="text-xs text-gray-500 mb-0.5">Mô tả</p>
-            <p className="text-gray-200 text-sm truncate">{pc.MoTa}</p>
-          </div>
-          <div className="text-right">
-            <p className="text-white font-bold text-base">{fmt(pc.SoTien)}</p>
-            <p className="text-gray-600 text-xs mt-0.5">{pc.NgayChi}</p>
-          </div>
-        </div>
-        <span className={clsx('shrink-0 text-xs px-2.5 py-1 rounded-full font-medium', cfg.cls)}>{cfg.label}</span>
-        <ChevronDown size={15} className={clsx('shrink-0 text-gray-500 transition-transform duration-200', open && 'rotate-180')} />
-      </button>
-
-      {/* Expanded detail */}
-      {open && (
-        <div className="border-t border-white/5 px-5 py-4 space-y-4">
-          <div className="grid grid-cols-3 gap-4 text-sm">
-            <div>
-              <p className="text-gray-500 text-xs mb-1">Người lập</p>
-              <p className="text-gray-200">{pc.NguoiLap}</p>
-            </div>
-            <div>
-              <p className="text-gray-500 text-xs mb-1">Chi nhánh</p>
-              <p className="text-gray-200">{pc.TenCN}</p>
-            </div>
-            <div>
-              <p className="text-gray-500 text-xs mb-1">Trạng thái</p>
-              <span className={clsx('text-xs px-2 py-0.5 rounded-full font-medium', cfg.cls)}>{cfg.label}</span>
-            </div>
-            {pc.NguoiDuyet && (
-              <div>
-                <p className="text-gray-500 text-xs mb-1">Người duyệt</p>
-                <p className="text-gray-200">{pc.NguoiDuyet}</p>
-              </div>
-            )}
-            {pc.NgayDuyet && (
-              <div>
-                <p className="text-gray-500 text-xs mb-1">Ngày duyệt</p>
-                <p className="text-gray-200">{pc.NgayDuyet}</p>
-              </div>
-            )}
-            {pc.LyDoTuChoi && (
-              <div className="col-span-3">
-                <p className="text-gray-500 text-xs mb-1">Lý do từ chối</p>
-                <p className="text-red-300 text-sm italic">"{pc.LyDoTuChoi}"</p>
-              </div>
-            )}
-          </div>
-
-          {/* Actions */}
-          {pc.TrangThai === 'Pending' && (
-            <div className="flex gap-2 pt-2 border-t border-white/5">
-              {canApprove && (
-                <>
-                  <button
-                    onClick={() => onApprove(pc.MaPC)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs font-medium transition-colors"
-                  >
-                    <Check size={13} /> Duyệt
-                  </button>
-                  {!showRejectBox ? (
-                    <button
-                      onClick={() => setShowRejectBox(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs font-medium transition-colors"
-                    >
-                      <X size={13} /> Từ chối
-                    </button>
-                  ) : (
-                    <div className="flex gap-2 flex-1">
-                      <input
-                        value={lyDo}
-                        onChange={e => setLyDo(e.target.value)}
-                        placeholder="Nhập lý do từ chối..."
-                        className="flex-1 bg-surface border border-red-500/30 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-red-500 placeholder:text-gray-600"
-                      />
-                      <button
-                        onClick={() => { onReject(pc.MaPC, lyDo); setShowRejectBox(false); setLyDo('') }}
-                        disabled={!lyDo.trim()}
-                        className="px-3 py-1.5 bg-red-500/80 hover:bg-red-500 disabled:opacity-40 text-white rounded-lg text-xs font-medium transition-colors"
-                      >
-                        Xác nhận
-                      </button>
-                      <button
-                        onClick={() => { setShowRejectBox(false); setLyDo('') }}
-                        className="px-2 py-1.5 text-gray-500 hover:text-white transition-colors text-xs"
-                      >
-                        Huỷ
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-              {canCancel && (
-                <button
-                  onClick={() => onCancel(pc.MaPC)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-500/10 hover:bg-gray-500/20 text-gray-400 border border-gray-500/30 rounded-lg text-xs font-medium transition-colors"
-                >
-                  <X size={13} /> Hủy phiếu
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+    <div className="card flex items-center gap-3 p-4">
+      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-50 text-brand-600">
+        {icon}
+      </div>
+      <div>
+        <p className="text-xs font-medium text-gray-500">{label}</p>
+        <p className="mt-1 text-lg font-bold text-gray-900">{value}</p>
+        <p className="mt-1 text-xs text-gray-400">{hint}</p>
+      </div>
     </div>
   )
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function PhieuChi() {
   const user = useAuthStore((s) => s.user)
   const role = normalizeRole(user?.vaiTro)
-  const canApprove = [ROLE.ADMIN, ROLE.OPS_DIRECTOR, ROLE.BRANCH_MANAGER].includes(role)
-  const canCreate = role !== ROLE.OPS_DIRECTOR && Boolean(user?.maCN)
 
+  const canApprove = [ROLE.ADMIN, ROLE.OPS_DIRECTOR, ROLE.BRANCH_MANAGER].includes(role)
+  const canCreate = [ROLE.ADMIN, ROLE.BRANCH_MANAGER, ROLE.CASHIER, ROLE.WAREHOUSE].includes(role)
+  const canPickBranch = [ROLE.ADMIN, ROLE.OPS_DIRECTOR].includes(role)
+
+  const [branches, setBranches] = useState([])
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [filterStatus, setFilterStatus]   = useState('all')
-  const [filterLoai, setFilterLoai]       = useState('all')
-  const [search, setSearch]               = useState('')
-  const [showModal, setShowModal]         = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [showCreate, setShowCreate] = useState(false)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [typeFilter, setTypeFilter] = useState('')
+  const [branchFilter, setBranchFilter] = useState('ALL')
   const [form, setForm] = useState({
-    LoaiChi: 'Vận hành',
-    MoTa: '',
+    MaCN: user?.maCN || '',
+    LoaiChi: 'Electricity',
     SoTien: '',
     NgayChi: new Date().toISOString().slice(0, 10),
+    MoTa: '',
   })
+
+  const selectedBranch = branchFilter === 'ALL' ? '' : branchFilter
+
+  const loadBranches = useCallback(async () => {
+    if (!canPickBranch) return
+    try {
+      const res = await api.get('/chi-nhanh')
+      setBranches((res.data || []).map(normalizeBranch))
+    } catch (err) {
+      toast.error(err.message || 'Không tải được danh sách chi nhánh')
+    }
+  }, [canPickBranch])
 
   const loadData = useCallback(async (showToast = false) => {
     setLoading(true)
     try {
-      const res = await api.get('/phieu-chi')
+      const params = {}
+      const targetBranch = canPickBranch ? selectedBranch : user?.maCN
+      if (targetBranch) params.maCN = targetBranch
+      if (statusFilter) params.trangThai = statusFilter
+
+      const res = await api.get('/phieu-chi', { params })
       setRecords((res.data?.items || []).map(normalizeExpense))
       if (showToast) toast.success('Đã làm mới danh sách phiếu chi')
     } catch (err) {
-      toast.error(err.message || 'Không tải được phiếu chi')
+      toast.error(err.message || 'Không tải được danh sách phiếu chi')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [canPickBranch, selectedBranch, statusFilter, user?.maCN])
+
+  useEffect(() => {
+    loadBranches()
+  }, [loadBranches])
 
   useEffect(() => {
     loadData()
   }, [loadData])
 
-  // ─── KPI ───────────────────────────────────────────────────────────────────
-  const now = new Date()
-  const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
-  const tongChiThang = records
-    .filter(r => r.TrangThai === 'Approved' && r.NgayChi.startsWith(thisMonth))
-    .reduce((s, r) => s + r.SoTien, 0)
-  const chooDuyet = records.filter(r => r.TrangThai === 'Pending').length
-  const tongPhieu = records.length
-
-  // ─── Filter ─────────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    return records
-      .filter(r => filterStatus === 'all' || r.TrangThai === filterStatus)
-      .filter(r => filterLoai === 'all' || r.LoaiChi === filterLoai)
-      .filter(r => {
-        if (!search) return true
-        const q = search.toLowerCase()
-        return r.MaPC.toLowerCase().includes(q) || r.MoTa.toLowerCase().includes(q) || r.NguoiLap.toLowerCase().includes(q)
-      })
-      .sort((a, b) => b.NgayChi.localeCompare(a.NgayChi))
-  }, [records, filterStatus, filterLoai, search])
+    return records.filter((item) => {
+      if (typeFilter && item.LoaiChi !== typeFilter) return false
+      if (!search.trim()) return true
+      const q = search.trim().toLowerCase()
+      return (
+        item.MaPC.toLowerCase().includes(q) ||
+        item.MoTa.toLowerCase().includes(q) ||
+        item.NguoiLap.toLowerCase().includes(q) ||
+        item.TenCN.toLowerCase().includes(q)
+      )
+    })
+  }, [records, search, typeFilter])
 
-  // ─── Handlers ───────────────────────────────────────────────────────────────
-  async function handleCreate() {
-    if (!form.MoTa.trim() || !form.SoTien) return
-    setSubmitting(true)
+  const totalApproved = filtered
+    .filter((item) => item.TrangThai === 'Approved')
+    .reduce((sum, item) => sum + item.SoTien, 0)
+  const totalPending = filtered.filter((item) => item.TrangThai === 'Pending').length
+  const totalRejected = filtered.filter((item) => item.TrangThai === 'Rejected').length
+
+  const handleCreate = async () => {
+    if (!form.MaCN || !form.LoaiChi || !form.SoTien || !form.MoTa.trim()) return
+    setSaving(true)
     try {
       const res = await api.post('/phieu-chi', {
-        MaCN: user?.maCN,
-        NgayChi: form.NgayChi,
-        LoaiChi: form.LoaiChi,
+        ...form,
         SoTien: Number(form.SoTien),
-        MoTa: form.MoTa.trim(),
       })
-      toast.success(res.message || 'Đã tạo phiếu chi!')
-      setShowModal(false)
-      setForm({ LoaiChi: 'Vận hành', MoTa: '', SoTien: '', NgayChi: new Date().toISOString().slice(0,10) })
+      toast.success(res.message || 'Đã tạo phiếu chi')
+      setShowCreate(false)
+      setForm({
+        MaCN: canPickBranch ? selectedBranch : user?.maCN || '',
+        LoaiChi: 'Electricity',
+        SoTien: '',
+        NgayChi: new Date().toISOString().slice(0, 10),
+        MoTa: '',
+      })
       await loadData()
     } catch (err) {
       toast.error(err.message || 'Không tạo được phiếu chi')
     } finally {
-      setSubmitting(false)
+      setSaving(false)
     }
   }
 
-  async function handleApprove(MaPC) {
+  const handleApprove = async (maPC) => {
     try {
-      const res = await api.patch(`/phieu-chi/${MaPC}/duyet`)
-      toast.success(res.message || 'Đã duyệt phiếu chi!')
+      const res = await api.patch(`/phieu-chi/${maPC}/duyet`)
+      toast.success(res.message || 'Đã duyệt phiếu chi')
       await loadData()
     } catch (err) {
       toast.error(err.message || 'Không duyệt được phiếu chi')
     }
   }
 
-  async function handleReject(MaPC, lyDo) {
+  const handleReject = async (maPC) => {
     try {
-      const res = await api.patch(`/phieu-chi/${MaPC}/tu-choi`, { LyDoTuChoi: lyDo })
-      toast.success(res.message || 'Đã từ chối phiếu chi.')
+      const res = await api.patch(`/phieu-chi/${maPC}/tu-choi`)
+      toast.success(res.message || 'Đã từ chối phiếu chi')
       await loadData()
     } catch (err) {
       toast.error(err.message || 'Không từ chối được phiếu chi')
     }
   }
 
-  async function handleCancel(MaPC) {
-    try {
-      const res = await api.patch(`/phieu-chi/${MaPC}/tu-choi`, { LyDoTuChoi: 'Người lập phiếu tự hủy' })
-      toast.success(res.message || 'Đã hủy phiếu chi.')
-      await loadData()
-    } catch (err) {
-      toast.error(err.message || 'Không hủy được phiếu chi')
-    }
-  }
+  const exportRows = filtered.map((item) => ({
+    ...item,
+    NgayChiHienThi: fmtDateTime(item.NgayChi),
+    TrangThaiHienThi: STATUS_LABEL[item.TrangThai] || item.TrangThai,
+  }))
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            <Receipt size={22} className="text-brand-400" />
-            Phiếu Chi vận hành
-          </h1>
-          <p className="text-gray-500 text-sm mt-0.5">Quản lý các khoản chi phí hoạt động chi nhánh</p>
+          <h1 className="text-xl font-bold text-gray-900">Phiếu chi vận hành</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Theo dõi và phê duyệt các khoản chi theo chi nhánh, trạng thái và loại chi phí.
+          </p>
         </div>
-        {canCreate && (
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            <Plus size={16} />
-            Tạo phiếu chi
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => loadData(true)} className="btn-secondary px-3 py-2 text-sm" disabled={loading}>
+            <RefreshCw size={14} className={clsx(loading && 'animate-spin')} />
+            Làm mới
           </button>
-        )}
+          <button
+            onClick={() => exportExcel('phieu-chi', 'Phiếu chi', [
+              { label: 'Mã phiếu', value: 'MaPC' },
+              { label: 'Chi nhánh', value: 'TenCN' },
+              { label: 'Loại chi', value: 'LoaiChiHienThi' },
+              { label: 'Số tiền', value: 'SoTien' },
+              { label: 'Ngày chi', value: 'NgayChiHienThi' },
+              { label: 'Người lập', value: 'NguoiLap' },
+              { label: 'Trạng thái', value: 'TrangThaiHienThi' },
+              { label: 'Mô tả', value: 'MoTa' },
+            ], exportRows)}
+            className="btn-secondary px-3 py-2 text-sm"
+            disabled={exportRows.length === 0}
+          >
+            <Download size={14} />
+            Xuất báo cáo
+          </button>
+          {canCreate && (
+            <button
+              onClick={() => {
+                setForm((prev) => ({ ...prev, MaCN: canPickBranch ? selectedBranch : user?.maCN || '' }))
+                setShowCreate(true)
+              }}
+              className="btn-primary px-3 py-2 text-sm"
+            >
+              <Plus size={14} />
+              Tạo phiếu chi
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: 'Tổng chi đã duyệt (tháng này)', value: fmt(tongChiThang), sub: 'Chỉ tính phiếu đã duyệt', accent: false },
-          { label: 'Phiếu chờ duyệt', value: chooDuyet, sub: 'Cần xử lý', accent: chooDuyet > 0 },
-          { label: 'Tổng phiếu chi', value: tongPhieu, sub: 'Tất cả trạng thái', accent: false },
-        ].map(k => (
-          <div key={k.label} className="bg-surface rounded-xl p-4 border border-white/5">
-            <p className="text-gray-500 text-xs">{k.label}</p>
-            <p className={clsx('font-bold text-2xl mt-1', k.accent ? 'text-amber-400' : 'text-white')}>{k.value}</p>
-            <p className="text-gray-600 text-xs mt-0.5">{k.sub}</p>
-          </div>
-        ))}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <KpiCard icon={<Receipt size={18} />} label="Tổng chi đã duyệt" value={fmtCurrency(totalApproved)} hint="Theo bộ lọc hiện tại" />
+        <KpiCard icon={<RefreshCw size={18} />} label="Phiếu chờ duyệt" value={totalPending} hint="Cần quản lý xử lý" />
+        <KpiCard icon={<XCircle size={18} />} label="Phiếu bị từ chối" value={totalRejected} hint="Các khoản chi chưa được chấp thuận" />
       </div>
 
-      {/* Filter bar */}
-      <div className="flex gap-3 flex-wrap">
-        {/* Search */}
-        <div className="relative flex-1 min-w-[200px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+      <div className="card flex flex-wrap items-center gap-3">
+        <div className="relative min-w-60 flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Tìm mã phiếu, mô tả, người lập..."
-            className="w-full pl-9 pr-3 py-2 bg-surface border border-white/10 rounded-lg text-white text-sm placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm theo mã phiếu, người lập, mô tả, chi nhánh..."
+            className="input pl-9 text-sm"
           />
         </div>
 
-        {/* Status filter */}
-        <select
-          value={filterStatus}
-          onChange={e => setFilterStatus(e.target.value)}
-          className="bg-surface border border-white/10 rounded-lg px-3 py-2 text-gray-300 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
-        >
-          <option value="all">Tất cả trạng thái</option>
-          <option value="Pending">Chờ duyệt</option>
-          <option value="Approved">Đã duyệt</option>
-          <option value="Rejected">Từ chối / Đã hủy</option>
+        {canPickBranch && (
+          <select
+            value={branchFilter}
+            onChange={(e) => setBranchFilter(e.target.value)}
+            className="input min-w-52 text-sm"
+          >
+            <option value="ALL">Tất cả chi nhánh</option>
+            {branches.map((branch) => (
+              <option key={branch.MaCN} value={branch.MaCN}>{branch.TenCN}</option>
+            ))}
+          </select>
+        )}
+
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input min-w-44 text-sm">
+          <option value="">Tất cả trạng thái</option>
+          {Object.entries(STATUS_LABEL).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
         </select>
 
-        {/* Loại chi filter */}
-        <select
-          value={filterLoai}
-          onChange={e => setFilterLoai(e.target.value)}
-          className="bg-surface border border-white/10 rounded-lg px-3 py-2 text-gray-300 text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
-        >
-          <option value="all">Tất cả loại chi</option>
-          {LOAI_CHI.map(l => <option key={l} value={l}>{l}</option>)}
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="input min-w-44 text-sm">
+          <option value="">Tất cả loại chi</option>
+          {EXPENSE_TYPES.map((item) => (
+            <option key={item.value} value={item.value}>{item.label}</option>
+          ))}
         </select>
       </div>
 
-      {/* List */}
-      <div className="space-y-2">
-        {loading && (
-          <div className="text-center py-16 text-gray-600">
-            <p>Đang tải phiếu chi...</p>
-          </div>
-        )}
-        {!loading && filtered.length === 0 && (
-          <div className="text-center py-16 text-gray-600">
-            <Receipt size={32} className="mx-auto mb-3 opacity-30" />
-            <p>Không tìm thấy phiếu chi nào</p>
-          </div>
-        )}
-        {!loading && filtered.map(pc => (
-          <PhieuRow
-            key={pc.MaPC}
-            pc={pc}
-            canApprove={canApprove}
-            currentUser={user}
-            onApprove={handleApprove}
-            onReject={handleReject}
-            onCancel={handleCancel}
-          />
-        ))}
+      <div className="card overflow-hidden p-0">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr className="border-b border-gray-100">
+                {['Mã phiếu', 'Chi nhánh', 'Loại chi', 'Ngày chi', 'Người lập', 'Số tiền', 'Trạng thái', 'Mô tả'].map((label) => (
+                  <th key={label} className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</th>
+                ))}
+                {canApprove && <th className="px-5 py-3" />}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={canApprove ? 9 : 8} className="px-5 py-10 text-center text-sm text-gray-400">
+                    <RefreshCw size={16} className="mr-2 inline animate-spin" />
+                    Đang tải dữ liệu phiếu chi...
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={canApprove ? 9 : 8} className="px-5 py-10 text-center text-sm text-gray-400">
+                    Không có phiếu chi nào khớp bộ lọc.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((item) => (
+                  <tr key={item.MaPC} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/80">
+                    <td className="px-5 py-4 font-mono text-xs font-semibold text-gray-700">{item.MaPC}</td>
+                    <td className="px-5 py-4 text-gray-700">{item.TenCN}</td>
+                    <td className="px-5 py-4 text-gray-700">{item.LoaiChiHienThi}</td>
+                    <td className="px-5 py-4 text-gray-500">{fmtDateTime(item.NgayChi)}</td>
+                    <td className="px-5 py-4 text-gray-700">{item.NguoiLap}</td>
+                    <td className="px-5 py-4 font-semibold text-gray-900">{fmtCurrency(item.SoTien)}</td>
+                    <td className="px-5 py-4">
+                      <span className={clsx('rounded-full border px-2.5 py-1 text-xs font-semibold', STATUS_CLASS[item.TrangThai] || STATUS_CLASS.Pending)}>
+                        {STATUS_LABEL[item.TrangThai] || item.TrangThai}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-gray-500">{item.MoTa || '—'}</td>
+                    {canApprove && (
+                      <td className="px-5 py-4">
+                        {item.TrangThai === 'Pending' ? (
+                          <div className="flex gap-2">
+                            <button onClick={() => handleApprove(item.MaPC)} className="inline-flex items-center gap-1 rounded-lg bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-100">
+                              <CheckCircle2 size={13} />
+                              Duyệt
+                            </button>
+                            <button onClick={() => handleReject(item.MaPC)} className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100">
+                              <XCircle size={13} />
+                              Từ chối
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">Đã xử lý</span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* ── Modal tạo phiếu chi ────────────────────────────────────────────── */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-sidebar rounded-2xl border border-white/10 w-full max-w-lg shadow-2xl">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-              <h3 className="text-white font-bold text-base flex items-center gap-2">
-                <Receipt size={16} className="text-brand-400" />
-                Tạo phiếu chi mới
-              </h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-white transition-colors">
-                <X size={18} />
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Tạo phiếu chi mới</h3>
+                <p className="mt-1 text-xs text-gray-400">Điền đủ thông tin khoản chi để gửi phê duyệt.</p>
+              </div>
+              <button onClick={() => setShowCreate(false)} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                <XCircle size={16} />
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
-              {/* Loại chi */}
+            <div className="grid gap-4 px-6 py-5 md:grid-cols-2">
+              {canPickBranch && (
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-semibold text-gray-600">Chi nhánh</label>
+                  <select
+                    value={form.MaCN}
+                    onChange={(e) => setForm((prev) => ({ ...prev, MaCN: e.target.value }))}
+                    className="input text-sm"
+                  >
+                    <option value="">-- Chọn chi nhánh --</option>
+                    {branches.map((branch) => (
+                      <option key={branch.MaCN} value={branch.MaCN}>{branch.TenCN}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
-                <label className="block text-xs text-gray-400 font-medium mb-1.5">Loại chi <span className="text-red-400">*</span></label>
-                <div className="grid grid-cols-3 gap-2">
-                  {LOAI_CHI.map(l => (
-                    <button
-                      key={l}
-                      onClick={() => setForm(f => ({ ...f, LoaiChi: l }))}
-                      className={clsx(
-                        'px-3 py-2 rounded-lg border text-xs font-medium transition-colors',
-                        form.LoaiChi === l
-                          ? 'bg-brand-500/15 border-brand-500 text-brand-300'
-                          : 'border-white/10 text-gray-500 hover:border-white/20 hover:text-gray-300'
-                      )}
-                    >
-                      {l}
-                    </button>
+                <label className="mb-1 block text-xs font-semibold text-gray-600">Loại chi</label>
+                <select
+                  value={form.LoaiChi}
+                  onChange={(e) => setForm((prev) => ({ ...prev, LoaiChi: e.target.value }))}
+                  className="input text-sm"
+                >
+                  {EXPENSE_TYPES.map((item) => (
+                    <option key={item.value} value={item.value}>{item.label}</option>
                   ))}
-                </div>
+                </select>
               </div>
 
-              {/* Mô tả */}
               <div>
-                <label className="block text-xs text-gray-400 font-medium mb-1.5">Mô tả chi tiết <span className="text-red-400">*</span></label>
-                <textarea
-                  rows={3}
-                  value={form.MoTa}
-                  onChange={e => setForm(f => ({ ...f, MoTa: e.target.value }))}
-                  placeholder="Nhập mô tả khoản chi..."
-                  className="w-full bg-surface border border-white/10 rounded-lg px-3 py-2 text-white text-sm resize-none focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-gray-600"
+                <label className="mb-1 block text-xs font-semibold text-gray-600">Ngày chi</label>
+                <input
+                  type="date"
+                  value={form.NgayChi}
+                  onChange={(e) => setForm((prev) => ({ ...prev, NgayChi: e.target.value }))}
+                  className="input text-sm"
                 />
               </div>
 
-              {/* Số tiền + Ngày lập */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs text-gray-400 font-medium mb-1.5">Số tiền (VNĐ) <span className="text-red-400">*</span></label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={form.SoTien}
-                    onChange={e => setForm(f => ({ ...f, SoTien: e.target.value }))}
-                    placeholder="0"
-                    className="w-full bg-surface border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-500 placeholder:text-gray-600"
-                  />
-                  {form.SoTien && (
-                    <p className="text-brand-400 text-xs mt-1">{fmt(Number(form.SoTien))}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-400 font-medium mb-1.5">Ngày lập</label>
-                  <input
-                    type="date"
-                    value={form.NgayChi}
-                    onChange={e => setForm(f => ({ ...f, NgayChi: e.target.value }))}
-                    className="w-full bg-surface border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  />
-                </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-gray-600">Số tiền</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.SoTien}
+                  onChange={(e) => setForm((prev) => ({ ...prev, SoTien: e.target.value }))}
+                  className="input text-sm"
+                  placeholder="Nhập số tiền..."
+                />
               </div>
 
-              {/* Người lập (readonly) */}
               <div>
-                <label className="block text-xs text-gray-400 font-medium mb-1.5">Người lập</label>
-                <input
-                  readOnly
-                  value={user?.hoTen || '—'}
-                  className="w-full bg-white/5 border border-white/5 rounded-lg px-3 py-2 text-gray-400 text-sm cursor-not-allowed"
+                <label className="mb-1 block text-xs font-semibold text-gray-600">Người lập</label>
+                <input readOnly value={user?.hoTen || '—'} className="input bg-gray-50 text-sm text-gray-500" />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-xs font-semibold text-gray-600">Mô tả khoản chi</label>
+                <textarea
+                  rows={4}
+                  value={form.MoTa}
+                  onChange={(e) => setForm((prev) => ({ ...prev, MoTa: e.target.value }))}
+                  className="input min-h-28 resize-none text-sm"
+                  placeholder="Ví dụ: Thanh toán chi phí bảo trì máy pha cà phê..."
                 />
               </div>
             </div>
 
-            <div className="px-6 pb-6 flex gap-3">
-              <button
-                onClick={() => setShowModal(false)}
-                className="flex-1 px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg text-sm transition-colors"
-              >
-                Huỷ
-              </button>
+            <div className="flex gap-3 px-6 pb-6">
+              <button onClick={() => setShowCreate(false)} className="btn-secondary flex-1">Huỷ</button>
               <button
                 onClick={handleCreate}
-                disabled={!form.MoTa.trim() || !form.SoTien || submitting}
-                className="flex-1 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-semibold transition-colors"
+                disabled={saving || !form.MaCN || !form.LoaiChi || !form.SoTien || !form.MoTa.trim()}
+                className="btn-primary flex-1"
               >
-                {submitting ? 'Đang tạo...' : 'Tạo phiếu'}
+                {saving ? 'Đang lưu...' : 'Tạo phiếu chi'}
               </button>
             </div>
           </div>

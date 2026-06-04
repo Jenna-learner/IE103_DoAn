@@ -14,28 +14,38 @@ const dashboard = async (req, res, next) => {
   try {
     const maCN = req.user.maCN || req.query.maCN;
     const ngay = req.query.ngay || new Date().toISOString().split('T')[0];
+    const doanhThuParams = [ngay];
+    const hoaDonParams = [ngay];
+    const canhBaoParams = [];
+    const doanhThuWhere = maCN ? `AND MaCN = $2` : '';
+    const hoaDonWhere = maCN ? `AND MaCN = $2` : '';
+    const canhBaoWhere = maCN ? `WHERE TenCN IN (SELECT TenCN FROM CHINHANH WHERE MaCN = $1)` : '';
+
+    if (maCN) {
+      doanhThuParams.push(maCN);
+      hoaDonParams.push(maCN);
+      canhBaoParams.push(maCN);
+    }
 
     const [doanhThu, chiPhi, canhBao] = await Promise.all([
-      // Doanh thu từ mv_doanhthu_ngay (Materialized View)
       db.query(
         `SELECT COALESCE(SUM(TongTienHang),   0)  AS TongDoanhThuTho,
                 COALESCE(SUM(TongGiamGia),    0)  AS TongGiamGia,
                 COALESCE(SUM(TongThanhToan),  0)  AS DoanhThuThuan
          FROM mv_doanhthu_ngay
-         WHERE Ngay = $1 ${maCN ? "AND MaCN = '" + maCN + "'" : ''}`,
-        [ngay]
+         WHERE Ngay = $1 ${doanhThuWhere}`,
+        doanhThuParams
       ),
-      // Số hóa đơn hoàn thành
       db.query(
         `SELECT COUNT(*) AS SoHoaDon FROM HOADON
          WHERE TrangThai = 'Completed' AND NgayLap::DATE = $1
-         ${maCN ? "AND MaCN = '" + maCN + "'" : ''}`,
-        [ngay]
+         ${hoaDonWhere}`,
+        hoaDonParams
       ),
-      // Số nguyên liệu dưới mức tối thiểu từ v_CanhBaoTonKho
       db.query(
         `SELECT COUNT(*) AS SoCanhBao FROM v_CanhBaoTonKho
-         ${maCN ? "WHERE TenCN IN (SELECT TenCN FROM CHINHANH WHERE MaCN = '" + maCN + "')" : ''}`
+         ${canhBaoWhere}`,
+        canhBaoParams
       ),
     ]);
 
@@ -61,11 +71,12 @@ const doanhThuTheoNgay = async (req, res, next) => {
 
     const { rows } = await db.query(
       `SELECT Ngay,
-               TongTienHang  AS TongDoanhThuTho,
-               TongGiamGia,
-               TongThanhToan AS DoanhThuThuan
+               SUM(TongTienHang)  AS TongDoanhThuTho,
+               SUM(TongGiamGia)   AS TongGiamGia,
+               SUM(TongThanhToan) AS DoanhThuThuan
        FROM mv_doanhthu_ngay
        WHERE TO_CHAR(Ngay,'YYYY-MM') = $1 ${maCNWhere}
+       GROUP BY Ngay
        ORDER BY Ngay`,
       params
     );
@@ -78,17 +89,33 @@ const topSanPham = async (req, res, next) => {
   try {
     const maCN  = req.user.maCN || req.query.maCN;
     const limit = parseInt(req.query.limit) || 10;
-    const params = [limit];
-    const maCNWhere = maCN ? `WHERE MaCN = $2` : '';
-    if (maCN) params.push(maCN);
+    let rows = [];
 
-    const { rows } = await db.query(
-      `SELECT MaSP, TenSP, TongSoLuongBan, TongDoanhThu
-       FROM mv_top_sanpham
-       ${maCNWhere}
-       ORDER BY TongSoLuongBan DESC LIMIT $1`,
-      params
-    );
+    if (maCN) {
+      const { rows: branchRows } = await db.query(
+        `SELECT MaSP, TenSP, TongSoLuongBan, TongDoanhThu
+         FROM mv_top_sanpham
+         WHERE MaCN = $1
+         ORDER BY TongSoLuongBan DESC, TongDoanhThu DESC
+         LIMIT $2`,
+        [maCN, limit]
+      );
+      rows = branchRows;
+    } else {
+      const { rows: systemRows } = await db.query(
+        `SELECT MaSP,
+                MAX(TenSP) AS TenSP,
+                SUM(TongSoLuongBan) AS TongSoLuongBan,
+                SUM(TongDoanhThu) AS TongDoanhThu
+         FROM mv_top_sanpham
+         GROUP BY MaSP
+         ORDER BY SUM(TongSoLuongBan) DESC, SUM(TongDoanhThu) DESC
+         LIMIT $1`,
+        [limit]
+      );
+      rows = systemRows;
+    }
+
     return success(res, rows);
   } catch (err) { next(err); }
 };
@@ -97,8 +124,9 @@ const topSanPham = async (req, res, next) => {
 const canhBaoTonKho = async (req, res, next) => {
   try {
     const maCN = req.user.maCN || req.query.maCN;
-    const where = maCN ? `WHERE TenCN IN (SELECT TenCN FROM CHINHANH WHERE MaCN = '${maCN}')` : '';
-    const { rows } = await db.query(`SELECT * FROM v_CanhBaoTonKho ${where} ORDER BY SoLuongTon`);
+    const where = maCN ? `WHERE TenCN IN (SELECT TenCN FROM CHINHANH WHERE MaCN = $1)` : '';
+    const params = maCN ? [maCN] : [];
+    const { rows } = await db.query(`SELECT * FROM v_CanhBaoTonKho ${where} ORDER BY SoLuongTon`, params);
     return success(res, rows);
   } catch (err) { next(err); }
 };

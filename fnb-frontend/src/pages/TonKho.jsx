@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
-  Package, AlertTriangle, Search,
+  Download, Package, AlertTriangle, Search,
   RefreshCw, ArrowDownCircle, ArrowUpCircle, ClipboardList,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 import api from '../lib/api'
+import { exportExcel } from '../lib/exportExcel'
 import { fmtNumber } from '../lib/format'
 
 const LOAI_CONFIG = {
@@ -244,6 +245,36 @@ export default function TonKho() {
           disabled={loading}
         >
           <RefreshCw size={13} className={clsx(loading && 'animate-spin')} /> Làm mới dữ liệu
+        </button>
+        <button
+          onClick={() => exportExcel(
+            activeTab === 0 ? 'ton-kho' : 'nhat-ky-kho',
+            activeTab === 0 ? 'Tồn kho' : 'Nhật ký kho',
+            activeTab === 0
+              ? [
+                  { label: 'Mã nguyên liệu', value: 'MaNL' },
+                  { label: 'Tên nguyên liệu', value: 'TenNL' },
+                  { label: 'Đơn vị tính', value: 'DonViTinh' },
+                  { label: 'Tồn hiện tại', value: 'SoLuongTon' },
+                  { label: 'Mức tối thiểu', value: 'TonToiThieu' },
+                  { label: 'Biên an toàn', value: (row) => row.SoLuongTon - row.TonToiThieu },
+                ]
+              : [
+                  { label: 'Mã nguyên liệu', value: 'MaNL' },
+                  { label: 'Tên nguyên liệu', value: 'TenNL' },
+                  { label: 'Loại biến động', value: 'LoaiBienDong' },
+                  { label: 'Số lượng', value: 'SoLuong' },
+                  { label: 'Số lượng trước', value: 'SoLuongTruoc' },
+                  { label: 'Số lượng sau', value: 'SoLuongSau' },
+                  { label: 'Chứng từ', value: 'MaChungTu' },
+                  { label: 'Thời gian', value: 'NgayThayDoi' },
+                ],
+            activeTab === 0 ? filteredTonKho : filteredNhatKy
+          )}
+          className="btn-secondary px-3 py-2 text-sm"
+          disabled={(activeTab === 0 ? filteredTonKho : filteredNhatKy).length === 0}
+        >
+          <Download size={13} /> Xuất báo cáo
         </button>
       </div>
 

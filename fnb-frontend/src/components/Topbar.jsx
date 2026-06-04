@@ -2,7 +2,7 @@
  * Topbar — Thanh tiêu đề phía trên
  * Hiển thị: nút toggle sidebar | tiêu đề trang | tên chi nhánh | nút logout
  */
-import { Menu, Bell, LogOut } from 'lucide-react'
+import { Menu, LogOut } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import useAuthStore from '../store/authStore'
@@ -62,15 +62,9 @@ export default function Topbar({ onToggleSidebar }) {
       {/* Chi nhánh */}
       {user?.tenCN && (
         <div className="hidden md:flex items-center gap-1.5 bg-brand-50 border border-brand-100 px-3 py-1.5 rounded-lg">
-          <span className="text-[10px] text-brand-600 font-medium">📍 {user.tenCN}</span>
+          <span className="text-[10px] text-brand-600 font-medium">{user.tenCN}</span>
         </div>
       )}
-
-      {/* Nút thông báo (placeholder) */}
-      <button className="relative text-gray-400 hover:text-gray-600 p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-        <Bell size={18} />
-        <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full" />
-      </button>
 
       {/* Nút Logout */}
       <button
