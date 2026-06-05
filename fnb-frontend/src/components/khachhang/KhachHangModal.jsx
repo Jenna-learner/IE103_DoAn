@@ -3,7 +3,7 @@
  *
  * Mode:
  *   mode='view'  → xem thông tin + lịch sử mua hàng, có nút "Chỉnh sửa"
- *   mode='edit'  → form chỉnh sửa điểm, hạng
+ *   mode='edit'  → form chỉnh sửa tên và email (hạng + điểm do hệ thống tự tính)
  *   mode='add'   → form thêm khách hàng mới (tên + SĐT)
  *
  * Props:
@@ -14,19 +14,17 @@
  *   orderHistory array    (các đơn hàng của KH, để hiển thị khi view)
  */
 import { useState, useEffect } from 'react'
-import { X, User, Phone, Star, Award, ShoppingBag, Check } from 'lucide-react'
+import { X, User, Phone, Star, Award, ShoppingBag } from 'lucide-react'
 import clsx from 'clsx'
 import { fmtCurrency } from '../../lib/format'
 
 /* ── Hạng thành viên config ─────────────────────────────────────────────── */
 const MEMBERSHIP = {
-  Bronze:  { cls: 'bg-orange-100 text-orange-700 border-orange-200', icon: '🥉', label: 'Bronze'  },
-  Silver:  { cls: 'bg-gray-100 text-gray-700 border-gray-200',       icon: '🥈', label: 'Silver'  },
-  Gold:    { cls: 'bg-yellow-100 text-yellow-700 border-yellow-200', icon: '🥇', label: 'Gold'    },
-  Platinum: { cls: 'bg-blue-100 text-blue-700 border-blue-200',      icon: '💎', label: 'Platinum' },
+  'Đồng':      { cls: 'bg-orange-100 text-orange-700 border-orange-200', icon: '🥉', label: 'Đồng'      },
+  'Bạc':       { cls: 'bg-gray-100 text-gray-700 border-gray-200',       icon: '🥈', label: 'Bạc'       },
+  'Vàng':      { cls: 'bg-yellow-100 text-yellow-700 border-yellow-200', icon: '🥇', label: 'Vàng'      },
+  'Kim cương': { cls: 'bg-blue-100 text-blue-700 border-blue-200',       icon: '💎', label: 'Kim cương' },
 }
-
-const HANG_OPTIONS = ['Bronze', 'Silver', 'Gold', 'Platinum']
 
 function fmtDate(str) {
   if (!str) return '—'
@@ -37,11 +35,10 @@ function fmtDate(str) {
 export default function KhachHangModal({ customer, mode: initMode, onClose, onSave, orderHistory = [] }) {
   const [mode, setMode] = useState(initMode)
 
-  // Form state
-  const [tenKH,   setTenKH]   = useState(customer?.TenKH   || '')
-  const [sdt,     setSDT]     = useState(customer?.SDT      || '')
-  const [diem,    setDiem]    = useState(customer?.DiemTichLuy ?? 0)
-  const [hang,    setHang]    = useState(customer?.HangThanhVien || 'Bronze')
+  // Form state — chỉ cho phép sửa tên và email
+  const [tenKH,   setTenKH]   = useState(customer?.TenKH || '')
+  const [sdt,     setSDT]     = useState(customer?.SDT   || '')
+  const [email,   setEmail]   = useState(customer?.Email || '')
   const [saving,  setSaving]  = useState(false)
   const [errors,  setErrors]  = useState({})
 
@@ -50,9 +47,8 @@ export default function KhachHangModal({ customer, mode: initMode, onClose, onSa
   /* ── Validation ── */
   const validate = () => {
     const e = {}
-    if (!tenKH.trim())              e.tenKH = 'Vui lòng nhập tên khách hàng'
-    if (!/^0\d{9}$/.test(sdt))     e.sdt   = 'SĐT không hợp lệ (10 số, bắt đầu bằng 0)'
-    if (diem < 0)                   e.diem  = 'Điểm không được âm'
+    if (!tenKH.trim())          e.tenKH = 'Vui lòng nhập tên khách hàng'
+    if (mode === 'add' && !/^0\d{9}$/.test(sdt)) e.sdt = 'SĐT không hợp lệ (10 số, bắt đầu bằng 0)'
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -61,11 +57,12 @@ export default function KhachHangModal({ customer, mode: initMode, onClose, onSa
   const handleSave = async () => {
     if (!validate()) return
     setSaving(true)
-    onSave({ TenKH: tenKH.trim(), SDT: sdt.trim(), DiemTichLuy: Number(diem), HangThanhVien: hang })
+    // DiemTichLuy và HangThanhVien không được gửi lên — hệ thống tự tính
+    onSave({ TenKH: tenKH.trim(), SDT: sdt.trim(), Email: email.trim() || null })
     setSaving(false)
   }
 
-  const mem = MEMBERSHIP[customer?.HangThanhVien] || MEMBERSHIP.Bronze
+  const mem = MEMBERSHIP[customer?.HangThanhVien] || MEMBERSHIP['Đồng']
 
   return (
     <div
@@ -205,7 +202,7 @@ export default function KhachHangModal({ customer, mode: initMode, onClose, onSa
                     value={sdt}
                     onChange={e => setSDT(e.target.value)}
                     placeholder="0xxxxxxxxx"
-                    disabled={mode === 'edit'} // không cho đổi SĐT khi sửa
+                    disabled={mode === 'edit'}
                     className={clsx(
                       'input pl-8 w-full text-sm',
                       errors.sdt && 'border-red-400 focus:ring-red-300',
@@ -217,44 +214,17 @@ export default function KhachHangModal({ customer, mode: initMode, onClose, onSa
                 {mode === 'edit' && <p className="text-[11px] text-gray-400 mt-1">SĐT không thể thay đổi</p>}
               </div>
 
-              {/* Hạng thành viên */}
+              {/* Email */}
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-2">Hạng thành viên</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {HANG_OPTIONS.map(h => {
-                    const m = MEMBERSHIP[h]
-                    return (
-                      <button
-                        key={h}
-                        type="button"
-                        onClick={() => setHang(h)}
-                        className={clsx(
-                          'flex items-center gap-2 px-3 py-2 rounded-xl border-2 text-sm font-semibold transition-all',
-                          hang === h ? m.cls + ' border-current' : 'border-gray-100 text-gray-500 hover:border-gray-200'
-                        )}
-                      >
-                        <span>{m.icon}</span> {m.label}
-                        {hang === h && <Check size={13} className="ml-auto" />}
-                      </button>
-                    )
-                  })}
-                </div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="example@email.com"
+                  className="input w-full text-sm"
+                />
               </div>
-
-              {/* Điểm tích lũy (chỉ edit) */}
-              {mode === 'edit' && (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Điểm tích lũy</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={diem}
-                    onChange={e => setDiem(e.target.value)}
-                    className={clsx('input w-full text-sm', errors.diem && 'border-red-400')}
-                  />
-                  {errors.diem && <p className="text-xs text-red-500 mt-1">{errors.diem}</p>}
-                </div>
-              )}
             </div>
           )}
 

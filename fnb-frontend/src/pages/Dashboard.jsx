@@ -318,7 +318,14 @@ export default function Dashboard() {
     }
   }
 
-  const todayOrders = orders.filter((item) => String(item.NgayLap || '').slice(0, 10) === todayISO())
+  // Chuyển NgayLap (UTC ISO string) sang local date trước khi so sánh với todayISO()
+  // Dùng cùng cách tính timezone offset như todayISO() để nhất quán
+  const toLocalDate = (str) => {
+    if (!str) return ''
+    const d = new Date(str)
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+  }
+  const todayOrders = orders.filter((item) => toLocalDate(item.NgayLap) === todayISO())
   const todayCompleted = todayOrders.filter((item) => item.TrangThai === 'Completed')
   const todayPending = todayOrders.filter((item) => item.TrangThai === 'Pending').length
   const pendingPO = purchaseOrders.filter((item) => item.TrangThai === 'Draft').length

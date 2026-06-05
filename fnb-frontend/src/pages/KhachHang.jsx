@@ -4,10 +4,11 @@
  * Tính năng:
  *   - Bảng danh sách: Tên + SĐT, Hạng thành viên, Điểm tích lũy, Ngày tham gia
  *   - Tìm kiếm theo tên hoặc SĐT
- *   - Lọc theo hạng thành viên (Bronze / Silver / Gold / Platinum)
+ *   - Lọc theo hạng thành viên (Đồng / Bạc / Vàng / Kim cương)
  *   - Nút "Thêm khách hàng" → mở modal form
  *   - Click hàng → modal xem chi tiết + lịch sử mua hàng
- *   - Trong modal: nút Chỉnh sửa → sửa hạng + điểm
+ *   - Trong modal: nút Chỉnh sửa → chỉ sửa tên và email
+ *   - Hạng + điểm tích lũy do hệ thống tự tính, không chỉnh thủ công
  *
  * Quyền truy cập: admin, quản lý chi nhánh, thu ngân
  *
@@ -23,18 +24,18 @@ import KhachHangModal from '../components/khachhang/KhachHangModal'
 
 /* ── Membership config ────────────────────────────────────────────────────── */
 const MEMBERSHIP = {
-  Bronze:  { cls: 'bg-orange-100 text-orange-700', icon: '🥉' },
-  Silver:  { cls: 'bg-gray-100 text-gray-700',     icon: '🥈' },
-  Gold:    { cls: 'bg-yellow-100 text-yellow-700', icon: '🥇' },
-  Platinum: { cls: 'bg-blue-100 text-blue-700',    icon: '💎' },
+  'Đồng':      { cls: 'bg-orange-100 text-orange-700', icon: '🥉' },
+  'Bạc':       { cls: 'bg-gray-100 text-gray-700',     icon: '🥈' },
+  'Vàng':      { cls: 'bg-yellow-100 text-yellow-700', icon: '🥇' },
+  'Kim cương': { cls: 'bg-blue-100 text-blue-700',     icon: '💎' },
 }
 
 const HANG_FILTER = [
-  { value: '',        label: 'Tất cả hạng' },
-  { value: 'Bronze',  label: '🥉 Bronze'   },
-  { value: 'Silver',  label: '🥈 Silver'   },
-  { value: 'Gold',    label: '🥇 Gold'     },
-  { value: 'Platinum', label: '💎 Platinum'  },
+  { value: '',           label: 'Tất cả hạng'   },
+  { value: 'Đồng',      label: '🥉 Đồng'        },
+  { value: 'Bạc',       label: '🥈 Bạc'         },
+  { value: 'Vàng',      label: '🥇 Vàng'        },
+  { value: 'Kim cương', label: '💎 Kim cương'   },
 ]
 
 
@@ -44,7 +45,7 @@ function normalizeCustomer(item = {}) {
     TenKH: item.TenKH || item.tenkh || '',
     SDT: item.SDT || item.sdt || '',
     Email: item.Email || item.email || '',
-    HangThanhVien: item.HangThanhVien || item.hangthanhvien || 'Bronze',
+    HangThanhVien: item.HangThanhVien || item.hangthanhvien || 'Đồng',
     DiemTichLuy: Number(item.DiemTichLuy ?? item.diemtichluy ?? 0),
     TongDonHang: Number(item.TongDonHang ?? item.tongdonhang ?? 0),
     TongChiTieu: Number(item.TongChiTieu ?? item.tongchitieu ?? 0),
@@ -101,7 +102,7 @@ export default function KhachHang() {
     setLoading(true)
     try {
       const [customerRes, orderRes] = await Promise.all([
-        api.get('/khach-hang', { params: { page: 1, limit: 500 } }),
+        api.get('/khach-hang', { params: { page: 1, limit: 10000 } }),
         api.get('/hoa-don', { params: { page: 1, limit: 500 } }),
       ])
       setCustomers((customerRes.data || []).map(normalizeCustomer))
@@ -129,8 +130,8 @@ export default function KhachHang() {
   }, [customers, filterHang, search])
 
   /* ── KPI ── */
-  const totalPlatinum = customers.filter(c => c.HangThanhVien === 'Platinum').length
-  const totalGold    = customers.filter(c => c.HangThanhVien === 'Gold').length
+  const totalKimCuong = customers.filter(c => c.HangThanhVien === 'Kim cương').length
+  const totalVang     = customers.filter(c => c.HangThanhVien === 'Vàng').length
   const totalPoints  = customers.reduce((s, c) => s + (c.DiemTichLuy || 0), 0)
 
   /* ── Lịch sử đơn hàng của KH được chọn ── */
@@ -185,7 +186,7 @@ export default function KhachHang() {
         />
         <KpiCard
           icon={<Trophy size={18} className="text-yellow-500" />}
-          label="Gold + Platinum" value={`${totalGold + totalPlatinum} người`} color="bg-yellow-50"
+          label="Vàng + Kim cương" value={`${totalVang + totalKimCuong} người`} color="bg-yellow-50"
         />
         <KpiCard
           icon={<Star size={18} className="text-purple-500" />}

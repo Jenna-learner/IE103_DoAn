@@ -34,6 +34,9 @@ const chiNhanhRoutes   = require('./src/routes/chinhanh.routes');
 const app  = express();
 const PORT = process.env.PORT || 5000;
 
+// Tắt ETag để tránh Express tự động trả 304 Not Modified cho API responses
+app.set('etag', false);
+
 // ── Middlewares ────────────────────────────────────────────
 app.use(helmet());
 app.use(cors({

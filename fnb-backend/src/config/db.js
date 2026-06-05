@@ -2,8 +2,12 @@
  * PostgreSQL Connection Pool (node-postgres)
  * Kết nối qua ZeroTier One VPN Network
  */
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
 require('dotenv').config();
+
+// Trả DATE (OID 1082) về string 'YYYY-MM-DD' thay vì Date object
+// Tránh lệch múi giờ khi pg tự convert sang local time rồi toISOString() lại lùi 7h
+types.setTypeParser(1082, val => val);
 
 const pool = new Pool({
   host:     process.env.DB_HOST,

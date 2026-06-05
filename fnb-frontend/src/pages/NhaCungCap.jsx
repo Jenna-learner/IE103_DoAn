@@ -4,6 +4,8 @@ import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 import api from '../lib/api'
+import useAuthStore from '../store/authStore'
+import { ROLE, normalizeRole } from '../lib/roles'
 
 const STATUS_OPTIONS = [
   { value: 'Active', label: 'Hoạt động' },
@@ -13,7 +15,6 @@ const STATUS_OPTIONS = [
 const EMPTY_FORM = {
   MaNCC: '',
   TenNCC: '',
-  NguoiLienHe: '',
   SDT: '',
   Email: '',
   DiaChi: '',
@@ -24,7 +25,6 @@ function normalizeSupplier(item) {
   return {
     MaNCC: item.MaNCC || item.mancc,
     TenNCC: item.TenNCC || item.tenncc,
-    NguoiLienHe: item.NguoiLienHe || item.nguoilienhe || '',
     SDT: item.SDT || item.sdt || '',
     Email: item.Email || item.email || '',
     DiaChi: item.DiaChi || item.diachi || '',
@@ -33,6 +33,9 @@ function normalizeSupplier(item) {
 }
 
 export default function NhaCungCap() {
+  const user = useAuthStore((s) => s.user)
+  const canEdit = normalizeRole(user?.vaiTro) === ROLE.ADMIN
+
   const [suppliers, setSuppliers] = useState([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
@@ -160,9 +163,11 @@ export default function NhaCungCap() {
         <button onClick={() => loadSuppliers(true)} className="btn-secondary text-sm px-3 py-2" disabled={loading}>
           <RefreshCw size={14} className={clsx(loading && 'animate-spin')} /> Làm mới
         </button>
-        <button onClick={openCreate} className="btn-primary text-sm px-3 py-2">
-          <Plus size={14} /> Thêm NCC
-        </button>
+        {canEdit && (
+          <button onClick={openCreate} className="btn-primary text-sm px-3 py-2">
+            <Plus size={14} /> Thêm NCC
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -180,10 +185,6 @@ export default function NhaCungCap() {
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Tên NCC</label>
               <input value={form.TenNCC} onChange={(e) => setForm((prev) => ({ ...prev, TenNCC: e.target.value }))} className="input text-sm" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">Người liên hệ</label>
-              <input value={form.NguoiLienHe} onChange={(e) => setForm((prev) => ({ ...prev, NguoiLienHe: e.target.value }))} className="input text-sm" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Số điện thoại</label>
@@ -244,13 +245,15 @@ export default function NhaCungCap() {
               </div>
               <div className="col-span-3 min-w-0">
                 <p className="font-medium text-gray-800 truncate">{item.TenNCC}</p>
-                <p className="text-[11px] text-gray-400 truncate">{item.NguoiLienHe || 'Chưa cập nhật liên hệ'}</p>
+                <p className="text-[11px] text-gray-400 truncate">{item.Email || item.SDT || '—'}</p>
               </div>
               <div className="col-span-2 text-xs text-gray-600 flex items-center gap-1"><Phone size={12} /> {item.SDT || '—'}</div>
               <div className="col-span-2 text-xs text-gray-600 flex items-center gap-1 truncate"><Mail size={12} /> {item.Email || '—'}</div>
               <div className="col-span-2 text-xs text-gray-600 flex items-center gap-1 truncate"><MapPin size={12} /> {item.DiaChi || '—'}</div>
               <div className="col-span-1 flex justify-end">
-                <button onClick={() => openEdit(item)} className="text-xs font-semibold text-brand-600 hover:underline">Sửa</button>
+                {canEdit && (
+                  <button onClick={() => openEdit(item)} className="text-xs font-semibold text-brand-600 hover:underline">Sửa</button>
+                )}
               </div>
             </div>
           ))}

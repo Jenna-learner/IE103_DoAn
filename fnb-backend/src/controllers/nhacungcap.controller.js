@@ -31,7 +31,7 @@ const getById = async (req, res, next) => {
 
 const create = async (req, res, next) => {
   try {
-    const { MaNCC, TenNCC, NguoiLienHe, SDT, Email, DiaChi } = req.body;
+    const { MaNCC, TenNCC, SDT, Email, DiaChi } = req.body;
 
     const { rows: duplicated } = await db.query(
       `SELECT 1
@@ -48,9 +48,9 @@ const create = async (req, res, next) => {
     }
 
     await db.query(
-      `INSERT INTO NHACUNGCAP (MaNCC, TenNCC, NguoiLienHe, SDT, Email, DiaChi)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
-      [MaNCC, TenNCC, NguoiLienHe, SDT, Email, DiaChi]
+      `INSERT INTO NHACUNGCAP (MaNCC, TenNCC, SDT, Email, DiaChi)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [MaNCC, TenNCC, SDT, Email, DiaChi]
     );
     return success(res, { MaNCC }, 'Thêm nhà cung cấp thành công', 201);
   } catch (err) { next(err); }
@@ -58,7 +58,7 @@ const create = async (req, res, next) => {
 
 const update = async (req, res, next) => {
   try {
-    const { TenNCC, NguoiLienHe, SDT, Email, DiaChi, TrangThai } = req.body;
+    const { TenNCC, SDT, Email, DiaChi, TrangThai } = req.body;
 
     const { rows: duplicated } = await db.query(
       `SELECT 1
@@ -91,9 +91,9 @@ const update = async (req, res, next) => {
     }
 
     await db.query(
-      `UPDATE NHACUNGCAP SET TenNCC=$1, NguoiLienHe=$2, SDT=$3, Email=$4, DiaChi=$5, TrangThai=$6
-       WHERE MaNCC=$7`,
-      [TenNCC, NguoiLienHe, SDT, Email, DiaChi, TrangThai, req.params.maNCC]
+      `UPDATE NHACUNGCAP SET TenNCC=$1, SDT=$2, Email=$3, DiaChi=$4, TrangThai=$5
+       WHERE MaNCC=$6`,
+      [TenNCC, SDT, Email, DiaChi, TrangThai, req.params.maNCC]
     );
     return success(res, null, 'Cập nhật nhà cung cấp thành công');
   } catch (err) { next(err); }
