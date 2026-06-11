@@ -1,15 +1,15 @@
 const db = require('../config/db');
 const { genMa } = require('../utils/magen');
 const { success, error } = require('../utils/response');
+const { canAccessBranchData, resolveBranchScope } = require('../utils/branchScope');
 
 const mapTrangThaiIn = (s) => (s === 'Approved' ? 'Received' : s);
 const mapTrangThaiOut = (s) => (s === 'Received' ? 'Approved' : s);
-const canAccessBranchData = (user, maCN) => ['admin', 'giam_doc_van_hanh'].includes(user.vaiTro) || (user.maCN && user.maCN === maCN);
 
 const getAll = async (req, res, next) => {
   try {
     const { trangThai, page = 1, limit = 20 } = req.query;
-    const maCN = req.user.maCN || req.query.maCN;
+    const maCN = resolveBranchScope(req.user, req.query.maCN);
     const offset = (page - 1) * limit;
     const params = [];
     const conds = [];

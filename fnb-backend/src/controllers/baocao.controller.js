@@ -7,12 +7,13 @@
  */
 const db = require('../config/db');
 const { success } = require('../utils/response');
+const { resolveBranchScope } = require('../utils/branchScope');
 
 // GET /api/v1/bao-cao/dashboard?maCN=&ngay=YYYY-MM-DD
 // Card KPIs real-time cho chi nhánh
 const dashboard = async (req, res, next) => {
   try {
-    const maCN = req.user.maCN || req.query.maCN;
+    const maCN = resolveBranchScope(req.user, req.query.maCN);
     const ngay = req.query.ngay || new Date().toISOString().split('T')[0];
     const doanhThuParams = [ngay];
     const hoaDonParams = [ngay];
@@ -63,7 +64,7 @@ const dashboard = async (req, res, next) => {
 // GET /api/v1/bao-cao/doanh-thu-theo-ngay?maCN=&thang=YYYY-MM
 const doanhThuTheoNgay = async (req, res, next) => {
   try {
-    const maCN = req.user.maCN || req.query.maCN;
+    const maCN = resolveBranchScope(req.user, req.query.maCN);
     const thang = req.query.thang || new Date().toISOString().slice(0, 7);
     const params = [thang];
     const maCNWhere = maCN ? `AND MaCN = $2` : '';
@@ -87,7 +88,7 @@ const doanhThuTheoNgay = async (req, res, next) => {
 // GET /api/v1/bao-cao/top-san-pham?maCN=&limit=10
 const topSanPham = async (req, res, next) => {
   try {
-    const maCN  = req.user.maCN || req.query.maCN;
+    const maCN  = resolveBranchScope(req.user, req.query.maCN);
     const limit = parseInt(req.query.limit) || 10;
     let rows = [];
 
@@ -123,7 +124,7 @@ const topSanPham = async (req, res, next) => {
 // GET /api/v1/bao-cao/canh-bao-ton-kho?maCN=
 const canhBaoTonKho = async (req, res, next) => {
   try {
-    const maCN = req.user.maCN || req.query.maCN;
+    const maCN = resolveBranchScope(req.user, req.query.maCN);
     const where = maCN ? `WHERE TenCN IN (SELECT TenCN FROM CHINHANH WHERE MaCN = $1)` : '';
     const params = maCN ? [maCN] : [];
     const { rows } = await db.query(`SELECT * FROM v_CanhBaoTonKho ${where} ORDER BY SoLuongTon`, params);
@@ -134,14 +135,16 @@ const canhBaoTonKho = async (req, res, next) => {
 // GET /api/v1/bao-cao/bang-luong?maCN=&thang=MM/YYYY
 const bangLuong = async (req, res, next) => {
   try {
-    const maCN  = req.user.maCN || req.query.maCN;
+    const maCN  = resolveBranchScope(req.user, req.query.maCN);
     const thang = req.query.thang; // format MM/YYYY
     const params = [];
     const conds  = [];
 
     if (thang) { params.push(thang); conds.push(`ThangNam = $${params.length}`); }
-
-    // v_BangLuongNhanVien không có cột MaCN → join qua PHANCONG
+    if (maCN) {
+      params.push(maCN);
+      conds.push(`TenCN IN (SELECT TenCN FROM CHINHANH WHERE MaCN = $${params.length})`);
+    }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
 
     const { rows } = await db.query(

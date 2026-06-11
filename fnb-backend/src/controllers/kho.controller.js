@@ -1,11 +1,10 @@
 const db = require('../config/db');
 const { success, error } = require('../utils/response');
-
-const canAccessBranchData = (user, maCN) => ['admin', 'giam_doc_van_hanh'].includes(user.vaiTro) || (user.maCN && user.maCN === maCN);
+const { canAccessBranchData, resolveBranchScope } = require('../utils/branchScope');
 
 const getTonKho = async (req, res, next) => {
   try {
-    const maCN = req.user.maCN || req.query.maCN;
+    const maCN = resolveBranchScope(req.user, req.query.maCN);
     const { canhBao } = req.query;
     const params = [];
     const conds = [];
@@ -33,7 +32,7 @@ const getTonKho = async (req, res, next) => {
 const getNhatKy = async (req, res, next) => {
   try {
     const { maNL, loai, page = 1, limit = 50 } = req.query;
-    const maCN = req.user.maCN || req.query.maCN;
+    const maCN = resolveBranchScope(req.user, req.query.maCN);
     const offset = (page - 1) * limit;
     const params = [];
     const conds = [];
@@ -89,7 +88,7 @@ const kiemKho = async (req, res, next) => {
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
-    const { MaCN, items } = req.body;
+    const { MaCN, items, GhiChu } = req.body;
     const maCN = MaCN || req.user.maCN;
     if (!maCN) {
       await client.query('ROLLBACK');
@@ -115,7 +114,7 @@ const kiemKho = async (req, res, next) => {
       await client.query(
         `INSERT INTO NHATKYKHO (MaCN, MaNL, LoaiBienDong, SoLuong, SoLuongTruoc, SoLuongSau, NguonPhatSinh, MaChungTu, MaNVThucHien, GhiChu)
          VALUES ($1,$2,$3,$4,$5,$6,'KIEMKHO',NULL,$7,$8)`,
-        [maCN, item.MaNL, loai, Math.abs(chenh), soLuongTruoc, soLuongSau, req.user.maNV, item.GhiChu || null]
+        [maCN, item.MaNL, loai, Math.abs(chenh), soLuongTruoc, soLuongSau, req.user.maNV, item.GhiChu || GhiChu || null]
       );
       ketQua.push({ MaNL: item.MaNL, soLuongTruoc, soLuongSau, chenh });
     }

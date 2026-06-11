@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const db = require('../config/db');
 const { success, error } = require('../utils/response');
+const { resolveBranchScope } = require('../utils/branchScope');
 
 const mapTrangThaiIn = (s) => {
   if (s === 'Inactive') return 'Suspended';
@@ -17,7 +18,7 @@ const canAccessEmployee = (user, maCN) => ['admin', 'giam_doc_van_hanh'].include
 const getAll = async (req, res, next) => {
   try {
     const { maBP, trangThai = 'Active' } = req.query;
-    const maCN = req.user.maCN || req.query.maCN;
+    const maCN = resolveBranchScope(req.user, req.query.maCN);
     const params = [];
     const conds = [];
 
@@ -78,12 +79,13 @@ const create = async (req, res, next) => {
        WHERE nv.MaNV = $1
           OR ($2 <> '' AND LOWER(COALESCE(nv.Email, '')) = LOWER($2))
           OR ($3 <> '' AND LOWER(COALESCE(tk.TenDangNhap, '')) = LOWER($3))
+          OR ($4 <> '' AND COALESCE(nv.SDT, '') = $4)
        LIMIT 1`,
-      [MaNV, Email || '', TenDangNhap || '']
+      [MaNV, Email || '', TenDangNhap || '', SDT || '']
     );
     if (duplicated.length > 0) {
       await client.query('ROLLBACK');
-      return error(res, 'Mã nhân viên, email hoặc tên đăng nhập đã tồn tại.', 409);
+      return error(res, 'Mã nhân viên, số điện thoại, email hoặc tên đăng nhập đã tồn tại.', 409);
     }
 
     await client.query(
@@ -140,6 +142,21 @@ const update = async (req, res, next) => {
       if (pendingShifts > 0) {
         return error(res, 'Nhân viên đang có ca làm đã phân công trong tương lai. Vui lòng xử lý phân công trước khi ngưng hoạt động.', 409);
       }
+    }
+
+    const { rows: duplicated } = await db.query(
+      `SELECT 1
+       FROM NHANVIEN
+       WHERE MaNV <> $1
+         AND (
+           ($2 <> '' AND COALESCE(SDT, '') = $2)
+           OR ($3 <> '' AND LOWER(COALESCE(Email, '')) = LOWER($3))
+         )
+       LIMIT 1`,
+      [req.params.maNV, SDT || '', Email || '']
+    );
+    if (duplicated.length > 0) {
+      return error(res, 'Số điện thoại hoặc email đã được sử dụng bởi nhân viên khác.', 409);
     }
 
     await db.queryCtx(req, 

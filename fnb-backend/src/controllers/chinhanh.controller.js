@@ -21,10 +21,11 @@ const createCN = async (req, res, next) => {
        WHERE MaCN = $1
           OR LOWER(TenCN) = LOWER($2)
           OR ($3 <> '' AND LOWER(COALESCE(Email, '')) = LOWER($3))
+          OR ($4 <> '' AND COALESCE(SDT, '') = $4)
        LIMIT 1`,
-      [MaCN, TenCN, Email || '']
+      [MaCN, TenCN, Email || '', SDT || '']
     );
-    if (duplicated.length > 0) return error(res, 'Mã chi nhánh, tên chi nhánh hoặc email đã tồn tại.', 409);
+    if (duplicated.length > 0) return error(res, 'Mã chi nhánh, tên chi nhánh, số điện thoại hoặc email đã tồn tại.', 409);
 
     await db.query(
       `INSERT INTO CHINHANH (MaCN, TenCN, DiaChi, SDT, Email) VALUES ($1,$2,$3,$4,$5)`,
@@ -44,11 +45,12 @@ const updateCN = async (req, res, next) => {
          AND (
            LOWER(TenCN) = LOWER($2)
            OR ($3 <> '' AND LOWER(COALESCE(Email, '')) = LOWER($3))
+           OR ($4 <> '' AND COALESCE(SDT, '') = $4)
          )
        LIMIT 1`,
-      [req.params.maCN, TenCN, Email || '']
+      [req.params.maCN, TenCN, Email || '', SDT || '']
     );
-    if (duplicated.length > 0) return error(res, 'Tên chi nhánh hoặc email đã được sử dụng ở chi nhánh khác.', 409);
+    if (duplicated.length > 0) return error(res, 'Tên chi nhánh, số điện thoại hoặc email đã được sử dụng ở chi nhánh khác.', 409);
 
     if (TrangThai === 'Inactive') {
       const { rows: impactRows } = await db.query(

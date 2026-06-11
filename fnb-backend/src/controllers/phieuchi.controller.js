@@ -1,7 +1,7 @@
 const db = require('../config/db');
 const { genMa } = require('../utils/magen');
 const { success, error } = require('../utils/response');
-const canAccessBranchData = (user, maCN) => ['admin', 'giam_doc_van_hanh'].includes(user.vaiTro) || (user.maCN && user.maCN === maCN);
+const { canAccessBranchData, resolveBranchScope } = require('../utils/branchScope');
 
 const EXPENSE_TYPE_MAP = {
   Electricity: 'Điện',
@@ -32,7 +32,7 @@ function normalizeLoaiChi(value) {
 const getAll = async (req, res, next) => {
   try {
     const { trangThai, thang } = req.query;
-    const maCN = req.user.maCN || req.query.maCN;
+    const maCN = resolveBranchScope(req.user, req.query.maCN);
     const params = [];
     const conds = [];
 

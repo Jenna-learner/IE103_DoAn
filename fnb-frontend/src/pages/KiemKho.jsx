@@ -132,7 +132,7 @@ export default function KiemKho() {
 
     const items = rows
       .filter((row) => row.thucTe !== '')
-      .map((row) => ({ MaNL: row.maNL, SoLuongThucTe: Number(row.thucTe) }))
+      .map((row) => ({ MaNL: row.maNL, SoLuongThucTe: Number(row.thucTe), GhiChu: row.lyDo.trim() || null }))
 
     if (!items.length) {
       toast.error('Vui lòng nhập ít nhất 1 số lượng thực tế')
