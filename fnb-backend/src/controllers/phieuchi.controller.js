@@ -42,7 +42,7 @@ const getAll = async (req, res, next) => {
 
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
 
-    const { rows } = await db.queryCtx(req, 
+    const { rows } = await req.db.query( 
       `SELECT pc.*, nv.HoTen AS TenNhanVienLap, cn.TenCN
        FROM PHIEUCHI pc
        LEFT JOIN NHANVIEN nv ON nv.MaNV = pc.MaNV
@@ -72,7 +72,7 @@ const create = async (req, res, next) => {
     if (!maCN) return error(res, 'Không xác định được chi nhánh lập phiếu chi.', 400);
     if (!canAccessBranchData(req.user, maCN)) return error(res, 'Bạn không có quyền tạo phiếu chi cho chi nhánh khác.', 403);
 
-    await db.queryCtx(req, 
+    await req.db.query( 
       `INSERT INTO PHIEUCHI (MaPC, MaCN, MaNV, NgayChi, LoaiChi, SoTien, MoTa, TrangThai)
        VALUES ($1,$2,$3,$4,$5,$6,$7,'Pending')`,
       [MaPC, maCN, req.user.maNV, NgayChi || new Date().toISOString(), loaiChiDb, SoTien, MoTa || null]
@@ -83,13 +83,13 @@ const create = async (req, res, next) => {
 
 const duyet = async (req, res, next) => {
   try {
-    const { rows } = await db.queryCtx(req, `SELECT MaCN, TrangThai FROM PHIEUCHI WHERE MaPC = $1`, [req.params.maPC]);
+    const { rows } = await req.db.query( `SELECT MaCN, TrangThai FROM PHIEUCHI WHERE MaPC = $1`, [req.params.maPC]);
     if (!rows[0]) return error(res, 'Phiếu chi không tồn tại.', 404);
     if (!canAccessBranchData(req.user, rows[0].macn)) return error(res, 'Bạn không có quyền duyệt phiếu chi thuộc chi nhánh khác.', 403);
     if (rows[0].trangthai !== 'Pending') return error(res, 'Chỉ duyệt được phiếu ở trạng thái Pending.', 400);
 
     // Conditional UPDATE: chỉ duyệt nếu vẫn còn Pending (tránh race condition)
-    const { rowCount } = await db.queryCtx(req, 
+    const { rowCount } = await req.db.query( 
       `UPDATE PHIEUCHI SET TrangThai = 'Approved' WHERE MaPC = $1 AND TrangThai = 'Pending'`,
       [req.params.maPC]
     );
@@ -100,13 +100,13 @@ const duyet = async (req, res, next) => {
 
 const tuChoi = async (req, res, next) => {
   try {
-    const { rows } = await db.queryCtx(req, `SELECT MaCN, TrangThai FROM PHIEUCHI WHERE MaPC = $1`, [req.params.maPC]);
+    const { rows } = await req.db.query( `SELECT MaCN, TrangThai FROM PHIEUCHI WHERE MaPC = $1`, [req.params.maPC]);
     if (!rows[0]) return error(res, 'Phiếu chi không tồn tại.', 404);
     if (!canAccessBranchData(req.user, rows[0].macn)) return error(res, 'Bạn không có quyền từ chối phiếu chi thuộc chi nhánh khác.', 403);
     if (rows[0].trangthai !== 'Pending') return error(res, 'Chỉ từ chối được phiếu ở trạng thái Pending.', 400);
 
     // Conditional UPDATE: chỉ từ chối nếu vẫn còn Pending (tránh race condition)
-    const { rowCount } = await db.queryCtx(req, 
+    const { rowCount } = await req.db.query( 
       `UPDATE PHIEUCHI SET TrangThai = 'Rejected' WHERE MaPC = $1 AND TrangThai = 'Pending'`,
       [req.params.maPC]
     );

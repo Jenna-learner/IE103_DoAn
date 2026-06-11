@@ -14,7 +14,7 @@ const getTonKho = async (req, res, next) => {
 
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
 
-    const { rows } = await db.queryCtx(req, 
+    const { rows } = await req.db.query( 
       `SELECT tk.MaCN, cn.TenCN, tk.MaNL, nl.TenNL, nl.DonViTinh,
               tk.SoLuongTon, tk.TonToiThieu,
               (tk.SoLuongTon <= tk.TonToiThieu) AS IsCanhBao
@@ -44,7 +44,7 @@ const getNhatKy = async (req, res, next) => {
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
     params.push(limit, offset);
 
-    const { rows } = await db.queryCtx(req, 
+    const { rows } = await req.db.query( 
       `SELECT nk.*, nk.NgayGhi AS NgayThayDoi, nl.TenNL, nl.DonViTinh, nv.HoTen AS TenNhanVien
        FROM NHATKYKHO nk
        JOIN NGUYENLIEU nl ON nl.MaNL = nk.MaNL
@@ -60,7 +60,7 @@ const getNhatKy = async (req, res, next) => {
 
 const getNguyenLieu = async (req, res, next) => {
   try {
-    const { rows } = await db.query(`SELECT * FROM NGUYENLIEU ORDER BY TenNL`);
+    const { rows } = await req.db.query(`SELECT * FROM NGUYENLIEU ORDER BY TenNL`);
     return success(res, rows);
   } catch (err) { next(err); }
 };
@@ -68,7 +68,7 @@ const getNguyenLieu = async (req, res, next) => {
 const createNguyenLieu = async (req, res, next) => {
   try {
     const { MaNL, TenNL, DonViTinh } = req.body;
-    await db.query(`INSERT INTO NGUYENLIEU (MaNL, TenNL, DonViTinh) VALUES ($1,$2,$3)`, [MaNL, TenNL, DonViTinh]);
+    await req.db.query(`INSERT INTO NGUYENLIEU (MaNL, TenNL, DonViTinh) VALUES ($1,$2,$3)`, [MaNL, TenNL, DonViTinh]);
     return success(res, { MaNL }, 'Thêm nguyên liệu thành công', 201);
   } catch (err) { next(err); }
 };
@@ -79,13 +79,13 @@ const capNhatMucToiThieu = async (req, res, next) => {
     const maCN = MaCN || req.user.maCN;
     if (!maCN) return error(res, 'Vui lòng chọn chi nhánh.', 400);
     if (!canAccessBranchData(req.user, maCN)) return error(res, 'Bạn không có quyền cập nhật tồn kho cho chi nhánh khác.', 403);
-    await db.queryCtx(req, `UPDATE TONKHO_CHINHANH SET TonToiThieu = $1, UpdatedAt=NOW() WHERE MaCN = $2 AND MaNL = $3`, [TonToiThieu, maCN, MaNL]);
+    await req.db.query( `UPDATE TONKHO_CHINHANH SET TonToiThieu = $1, UpdatedAt=NOW() WHERE MaCN = $2 AND MaNL = $3`, [TonToiThieu, maCN, MaNL]);
     return success(res, null, 'Cập nhật mức tồn tối thiểu thành công');
   } catch (err) { next(err); }
 };
 
 const kiemKho = async (req, res, next) => {
-  const client = await db.getClient();
+  const client = await req.db.getClient();
   try {
     await client.query('BEGIN');
     const { MaCN, items, GhiChu } = req.body;

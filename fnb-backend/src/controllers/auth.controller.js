@@ -42,7 +42,7 @@ const login = async (req, res, next) => {
 
 const getMe = async (req, res, next) => {
   try {
-    const { rows } = await db.query(
+    const { rows } = await req.db.query(
       `SELECT tk.TenDangNhap, tk.VaiTro, nv.MaNV, nv.HoTen, nv.SDT, nv.Email, nv.MaBP,
               nc.MaCN, cn.TenCN
        FROM TAIKHOAN tk
@@ -59,12 +59,12 @@ const getMe = async (req, res, next) => {
 const doiMatKhau = async (req, res, next) => {
   try {
     const { matKhauCu, matKhauMoi } = req.body;
-    const { rows } = await db.query(`SELECT MatKhau FROM TAIKHOAN WHERE MaTK = $1`, [req.user.maTK]);
+    const { rows } = await req.db.query(`SELECT MatKhau FROM TAIKHOAN WHERE MaTK = $1`, [req.user.maTK]);
     const isMatch = await bcrypt.compare(matKhauCu, rows[0].matkhau);
     if (!isMatch) return error(res, 'Mật khẩu cũ không đúng.', 400);
 
     const hash = await bcrypt.hash(matKhauMoi, 10);
-    await db.query(`UPDATE TAIKHOAN SET MatKhau = $1, UpdatedAt=NOW() WHERE MaTK = $2`, [hash, req.user.maTK]);
+    await req.db.query(`UPDATE TAIKHOAN SET MatKhau = $1, UpdatedAt=NOW() WHERE MaTK = $2`, [hash, req.user.maTK]);
     return success(res, null, 'Đổi mật khẩu thành công');
   } catch (err) { next(err); }
 };

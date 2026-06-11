@@ -43,7 +43,7 @@ const getAll = async (req, res, next) => {
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
     params.push(limit, offset);
 
-    const { rows } = await db.query(
+    const { rows } = await req.db.query(
       `SELECT sp.MaSP, sp.TenSP, sp.GiaBanMacDinh AS GiaBan, sp.TrangThai, lsp.MaLoai, lsp.TenLoai
        FROM SANPHAM sp
        LEFT JOIN LOAISANPHAM lsp ON lsp.MaLoai = sp.MaLoai
@@ -53,7 +53,7 @@ const getAll = async (req, res, next) => {
       params
     );
 
-    const { rows: cr } = await db.query(`SELECT COUNT(*) FROM SANPHAM sp ${where}`, params.slice(0, -2));
+    const { rows: cr } = await req.db.query(`SELECT COUNT(*) FROM SANPHAM sp ${where}`, params.slice(0, -2));
     const data = rows.map((r) => ({ ...r, TrangThai: fromDbStatus(r.trangthai || r.TrangThai) }));
     return paginated(res, data, parseInt(cr[0].count), page, limit);
   } catch (err) { next(err); }
@@ -61,7 +61,7 @@ const getAll = async (req, res, next) => {
 
 const getById = async (req, res, next) => {
   try {
-    const { rows } = await db.query(
+    const { rows } = await req.db.query(
       `SELECT sp.MaSP, sp.TenSP, sp.MoTa, sp.GiaBanMacDinh AS GiaBan, sp.TrangThai, sp.MaLoai, lsp.TenLoai
        FROM SANPHAM sp
        LEFT JOIN LOAISANPHAM lsp ON lsp.MaLoai = sp.MaLoai
@@ -70,7 +70,7 @@ const getById = async (req, res, next) => {
     );
     if (!rows[0]) return error(res, 'Sản phẩm không tồn tại.', 404);
 
-    const { rows: congthuc } = await db.query(
+    const { rows: congthuc } = await req.db.query(
       `SELECT ct.MaNL, ct.DinhMuc AS SoLuongLuong, nl.TenNL, nl.DonViTinh
        FROM CONGTHUC ct
        JOIN NGUYENLIEU nl ON nl.MaNL = ct.MaNL
@@ -83,7 +83,7 @@ const getById = async (req, res, next) => {
 };
 
 const create = async (req, res, next) => {
-  const client = await db.getClient();
+  const client = await req.db.getClient();
   try {
     await client.query('BEGIN');
     const { MaSP, TenSP, MaLoai, GiaBan, TrangThai = 'Active', congthuc = [] } = req.body;
@@ -120,7 +120,7 @@ const create = async (req, res, next) => {
 };
 
 const update = async (req, res, next) => {
-  const client = await db.getClient();
+  const client = await req.db.getClient();
   try {
     await client.query('BEGIN');
     const { TenSP, MaLoai, GiaBan, TrangThai, congthuc } = req.body;
@@ -163,7 +163,7 @@ const update = async (req, res, next) => {
 const doiTrangThai = async (req, res, next) => {
   try {
     const { TrangThai } = req.body;
-    await db.query(`UPDATE SANPHAM SET TrangThai = $1, UpdatedAt=NOW() WHERE MaSP = $2`, [toDbStatus(TrangThai), req.params.maSP]);
+    await req.db.query(`UPDATE SANPHAM SET TrangThai = $1, UpdatedAt=NOW() WHERE MaSP = $2`, [toDbStatus(TrangThai), req.params.maSP]);
     return success(res, null, `Đã cập nhật trạng thái sản phẩm → ${TrangThai}`);
   } catch (err) { next(err); }
 };

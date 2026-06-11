@@ -7,7 +7,7 @@ const { success, error } = require('../utils/response');
 // ── CHI NHÁNH ──────────────────────────────────────────────
 const getAllCN = async (req, res, next) => {
   try {
-    const { rows } = await db.query(`SELECT * FROM CHINHANH ORDER BY COALESCE(NULLIF(regexp_replace(MaCN, '\\D', '', 'g'), ''), '0')::INT, MaCN`);
+    const { rows } = await req.db.query(`SELECT * FROM CHINHANH ORDER BY COALESCE(NULLIF(regexp_replace(MaCN, '\\D', '', 'g'), ''), '0')::INT, MaCN`);
     return success(res, rows);
   } catch (err) { next(err); }
 };
@@ -15,7 +15,7 @@ const getAllCN = async (req, res, next) => {
 const createCN = async (req, res, next) => {
   try {
     const { MaCN, TenCN, DiaChi, SDT, Email } = req.body;
-    const { rows: duplicated } = await db.query(
+    const { rows: duplicated } = await req.db.query(
       `SELECT 1
        FROM CHINHANH
        WHERE MaCN = $1
@@ -27,7 +27,7 @@ const createCN = async (req, res, next) => {
     );
     if (duplicated.length > 0) return error(res, 'Mã chi nhánh, tên chi nhánh, số điện thoại hoặc email đã tồn tại.', 409);
 
-    await db.query(
+    await req.db.query(
       `INSERT INTO CHINHANH (MaCN, TenCN, DiaChi, SDT, Email) VALUES ($1,$2,$3,$4,$5)`,
       [MaCN, TenCN, DiaChi, SDT, Email]
     );
@@ -38,7 +38,7 @@ const createCN = async (req, res, next) => {
 const updateCN = async (req, res, next) => {
   try {
     const { TenCN, DiaChi, SDT, Email, TrangThai } = req.body;
-    const { rows: duplicated } = await db.query(
+    const { rows: duplicated } = await req.db.query(
       `SELECT 1
        FROM CHINHANH
        WHERE MaCN <> $1
@@ -53,7 +53,7 @@ const updateCN = async (req, res, next) => {
     if (duplicated.length > 0) return error(res, 'Tên chi nhánh, số điện thoại hoặc email đã được sử dụng ở chi nhánh khác.', 409);
 
     if (TrangThai === 'Inactive') {
-      const { rows: impactRows } = await db.query(
+      const { rows: impactRows } = await req.db.query(
         `SELECT
             (SELECT COUNT(*)
              FROM NHANVIEN_CHINHANH nc
@@ -86,7 +86,7 @@ const updateCN = async (req, res, next) => {
       }
     }
 
-    await db.query(
+    await req.db.query(
       `UPDATE CHINHANH SET TenCN=$1, DiaChi=$2, SDT=$3, Email=$4, TrangThai=$5 WHERE MaCN=$6`,
       [TenCN, DiaChi, SDT, Email, TrangThai, req.params.maCN]
     );
@@ -97,7 +97,7 @@ const updateCN = async (req, res, next) => {
 // ── BỘ PHẬN ────────────────────────────────────────────────
 const getAllBP = async (req, res, next) => {
   try {
-    const { rows } = await db.query(`SELECT * FROM BOPHAN ORDER BY COALESCE(NULLIF(regexp_replace(MaBP, '\\D', '', 'g'), ''), '0')::INT, MaBP`);
+    const { rows } = await req.db.query(`SELECT * FROM BOPHAN ORDER BY COALESCE(NULLIF(regexp_replace(MaBP, '\\D', '', 'g'), ''), '0')::INT, MaBP`);
     return success(res, rows);
   } catch (err) { next(err); }
 };
