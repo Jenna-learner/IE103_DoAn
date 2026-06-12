@@ -13,7 +13,6 @@ const morgan       = require('morgan');
 
 const { pool }        = require('./src/config/db');
 const errorHandler    = require('./src/middleware/errorHandler');
-const { setDbContext } = require('./src/middleware/dbContext');
 
 // ── Import Routes (theo schema thực tế) ───────────────────
 const authRoutes       = require('./src/routes/auth.routes');

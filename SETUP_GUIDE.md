@@ -99,11 +99,26 @@ DB_PORT=5432
 DB_NAME=fnb_chain_db
 DB_USER=postgres
 DB_PASSWORD=nhule875
+DB_AUTH_USER=app_auth_user
+DB_AUTH_PASSWORD=Auth@Service2026!
+DB_ADMIN_USER=app_admin
+DB_ADMIN_PASSWORD=Admin@Str0ng!2026
+DB_HQ_USER=app_hq_user
+DB_HQ_PASSWORD=HQ_Mgr!2026
+DB_BRANCH_MANAGER_USER=app_manager_user
+DB_BRANCH_MANAGER_PASSWORD=Mgr@Br4nch2026
+DB_CASHIER_USER=app_cashier_user
+DB_CASHIER_PASSWORD=Cash!er2026
+DB_WAREHOUSE_USER=app_warehouse_user
+DB_WAREHOUSE_PASSWORD=War3house2026!
 JWT_SECRET=your_super_secret_key_change_this_in_production
 JWT_EXPIRES_IN=8h
 PORT=5000
 FRONTEND_URL=http://localhost:5173
 ```
+
+> Với kiến trúc phân quyền trực tiếp ở DB, backend sẽ dùng `DB_AUTH_USER` cho login/health và tự chọn DB user theo `VaiTro` ở runtime.
+> Sau khi cập nhật schema bảo mật, cần chạy lại `fnb-backend/sql/03_security_roles.sql` để tạo đủ role/user/policy mới.
 
 > ⚠️ Đảm bảo ZeroTier One đang chạy và đã join vào mạng trước khi khởi động server.
 

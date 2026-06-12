@@ -16,14 +16,14 @@ const getAll = async (req, res, next) => {
     }
 
     query += ` ORDER BY TenNCC`;
-    const { rows } = await db.query(query, params);
+    const { rows } = await req.db.query(query, params);
     return success(res, rows);
   } catch (err) { next(err); }
 };
 
 const getById = async (req, res, next) => {
   try {
-    const { rows } = await db.query(`SELECT * FROM NHACUNGCAP WHERE MaNCC = $1`, [req.params.maNCC]);
+    const { rows } = await req.db.query(`SELECT * FROM NHACUNGCAP WHERE MaNCC = $1`, [req.params.maNCC]);
     if (!rows[0]) return error(res, 'Nhà cung cấp không tồn tại.', 404);
     return success(res, rows[0]);
   } catch (err) { next(err); }
@@ -33,7 +33,7 @@ const create = async (req, res, next) => {
   try {
     const { MaNCC, TenNCC, SDT, Email, DiaChi } = req.body;
 
-    const { rows: duplicated } = await db.query(
+    const { rows: duplicated } = await req.db.query(
       `SELECT 1
        FROM NHACUNGCAP
        WHERE MaNCC = $1
@@ -47,7 +47,7 @@ const create = async (req, res, next) => {
       return error(res, 'Mã, tên, email hoặc số điện thoại nhà cung cấp đã tồn tại.', 409);
     }
 
-    await db.query(
+    await req.db.query(
       `INSERT INTO NHACUNGCAP (MaNCC, TenNCC, SDT, Email, DiaChi)
        VALUES ($1,$2,$3,$4,$5)`,
       [MaNCC, TenNCC, SDT, Email, DiaChi]
@@ -60,7 +60,7 @@ const update = async (req, res, next) => {
   try {
     const { TenNCC, SDT, Email, DiaChi, TrangThai } = req.body;
 
-    const { rows: duplicated } = await db.query(
+    const { rows: duplicated } = await req.db.query(
       `SELECT 1
        FROM NHACUNGCAP
        WHERE MaNCC <> $1
@@ -77,7 +77,7 @@ const update = async (req, res, next) => {
     }
 
     if (TrangThai === 'Inactive') {
-      const { rows: related } = await db.query(
+      const { rows: related } = await req.db.query(
         `SELECT COUNT(*) FILTER (WHERE pn.TrangThai = 'Draft') AS draft_receipts
          FROM PHIEUNHAP pn
          WHERE pn.MaNCC = $1`,
@@ -90,7 +90,7 @@ const update = async (req, res, next) => {
       }
     }
 
-    await db.query(
+    await req.db.query(
       `UPDATE NHACUNGCAP SET TenNCC=$1, SDT=$2, Email=$3, DiaChi=$4, TrangThai=$5
        WHERE MaNCC=$6`,
       [TenNCC, SDT, Email, DiaChi, TrangThai, req.params.maNCC]

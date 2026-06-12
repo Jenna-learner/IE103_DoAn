@@ -38,7 +38,7 @@ const getAll = async (req, res, next) => {
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
     params.push(limit, offset);
 
-    const { rows } = await db.query(
+    const { rows } = await req.db.query(
       `SELECT k.MaKH, k.HoTen AS TenKH, k.SDT, k.Email,
               k.DiemTichLuy, k.HangThanhVien, k.TrangThai, k.CreatedAt,
               COUNT(hd.MaHD)              AS TongDonHang,
@@ -51,7 +51,7 @@ const getAll = async (req, res, next) => {
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
-    const { rows: cr } = await db.query(`SELECT COUNT(*) FROM KHACHHANG k ${where}`, params.slice(0, -2));
+    const { rows: cr } = await req.db.query(`SELECT COUNT(*) FROM KHACHHANG k ${where}`, params.slice(0, -2));
     return paginated(res, rows.map(mapRow), parseInt(cr[0].count), page, limit);
   } catch (err) { next(err); }
 };
@@ -60,7 +60,7 @@ const traCuu = async (req, res, next) => {
   try {
     const { sdt } = req.query;
     if (!sdt) return error(res, 'Vui lòng nhập số điện thoại.', 400);
-    const { rows } = await db.query(
+    const { rows } = await req.db.query(
       `SELECT MaKH, HoTen AS TenKH, SDT, Email, DiemTichLuy, HangThanhVien, TrangThai
        FROM KHACHHANG WHERE SDT = $1`,
       [sdt]
@@ -71,7 +71,7 @@ const traCuu = async (req, res, next) => {
 
 const getById = async (req, res, next) => {
   try {
-    const { rows } = await db.query(
+    const { rows } = await req.db.query(
       `SELECT MaKH, HoTen AS TenKH, SDT, Email, DiemTichLuy, HangThanhVien, TrangThai
        FROM KHACHHANG WHERE MaKH = $1`,
       [req.params.maKH]
@@ -84,7 +84,7 @@ const getById = async (req, res, next) => {
 const create = async (req, res, next) => {
   try {
     const { TenKH, SDT, Email } = req.body;
-    const { rows: duplicated } = await db.query(
+    const { rows: duplicated } = await req.db.query(
       `SELECT 1
        FROM KHACHHANG
        WHERE ($1 <> '' AND SDT = $1)
@@ -97,7 +97,7 @@ const create = async (req, res, next) => {
     }
 
     const MaKH = genMa('KH');
-    await db.query(`INSERT INTO KHACHHANG (MaKH, HoTen, SDT, Email) VALUES ($1,$2,$3,$4)`, [MaKH, TenKH, SDT, Email]);
+    await req.db.query(`INSERT INTO KHACHHANG (MaKH, HoTen, SDT, Email) VALUES ($1,$2,$3,$4)`, [MaKH, TenKH, SDT, Email]);
     return success(res, { MaKH, TenKH, SDT, HangThanhVien: 'Đồng', DiemTichLuy: 0 }, 'Đăng ký khách hàng thành công', 201);
   } catch (err) { next(err); }
 };
@@ -108,7 +108,7 @@ const update = async (req, res, next) => {
     // DiemTichLuy và HangThanhVien do hệ thống tự tính — không role nào được chỉnh thủ công.
     const { TenKH, Email } = req.body;
 
-    const { rows: duplicated } = await db.query(
+    const { rows: duplicated } = await req.db.query(
       `SELECT 1
        FROM KHACHHANG
        WHERE MaKH <> $1
@@ -120,7 +120,7 @@ const update = async (req, res, next) => {
       return error(res, 'Email khách hàng đã tồn tại.', 409);
     }
 
-    await db.query(
+    await req.db.query(
       `UPDATE KHACHHANG SET HoTen = $1, Email = $2, UpdatedAt = NOW() WHERE MaKH = $3`,
       [TenKH, Email || null, req.params.maKH]
     );

@@ -1,92 +1,166 @@
 /**
- * PostgreSQL Connection Pool (node-postgres)
- * Kết nối qua ZeroTier One VPN Network
+ * PostgreSQL Connection Pools
+ *
+ * Mô hình cho đồ án:
+ * - 1 service/auth pool tối thiểu để login + health check
+ * - Nhiều pool theo DB role thực tế để runtime request dùng đúng quyền DB
+ * - Mọi authenticated request được bind vào req.db qua middleware
  */
 const { Pool, types } = require('pg');
 require('dotenv').config();
 
-// Trả DATE (OID 1082) về string 'YYYY-MM-DD' thay vì Date object
-// Tránh lệch múi giờ khi pg tự convert sang local time rồi toISOString() lại lùi 7h
-types.setTypeParser(1082, val => val);
+types.setTypeParser(1082, (val) => val);
 
-const pool = new Pool({
-  host:     process.env.DB_HOST,
-  port:     parseInt(process.env.DB_PORT, 10),
+const baseConfig = {
+  host: process.env.DB_HOST,
+  port: parseInt(process.env.DB_PORT, 10),
   database: process.env.DB_NAME,
-  user:     process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+  ssl: false,
+};
 
-  // Connection Pool settings
-  max:              10,   // Tối đa 10 kết nối đồng thời
-  idleTimeoutMillis: 30000, // Đóng kết nối idle sau 30s
-  connectionTimeoutMillis: 5000, // Timeout kết nối sau 5s
-  ssl: false,             // Tắt SSL (dùng qua ZeroTier VPN nội bộ)
-});
+const DEFAULT_DB_USERS = {
+  auth: {
+    user: process.env.DB_AUTH_USER || process.env.DB_USER || 'app_auth_user',
+    password: process.env.DB_AUTH_PASSWORD || process.env.DB_PASSWORD || 'Auth@Service2026!',
+  },
+  admin: {
+    user: process.env.DB_ADMIN_USER || 'app_admin',
+    password: process.env.DB_ADMIN_PASSWORD || 'Admin@Str0ng!2026',
+  },
+  giam_doc_van_hanh: {
+    user: process.env.DB_HQ_USER || 'app_hq_user',
+    password: process.env.DB_HQ_PASSWORD || 'HQ_Mgr!2026',
+  },
+  quan_ly_chinhanh: {
+    user: process.env.DB_BRANCH_MANAGER_USER || 'app_manager_user',
+    password: process.env.DB_BRANCH_MANAGER_PASSWORD || 'Mgr@Br4nch2026',
+  },
+  thu_ngan: {
+    user: process.env.DB_CASHIER_USER || 'app_cashier_user',
+    password: process.env.DB_CASHIER_PASSWORD || 'Cash!er2026',
+  },
+  kho: {
+    user: process.env.DB_WAREHOUSE_USER || 'app_warehouse_user',
+    password: process.env.DB_WAREHOUSE_PASSWORD || 'War3house2026!',
+  },
+  hr: {
+    user: process.env.DB_HR_USER || 'app_hr_user',
+    password: process.env.DB_HR_PASSWORD || 'HR_Staff@2026',
+  },
+};
 
-// Kiểm tra kết nối khi khởi động
-pool.on('connect', () => {
-  console.log('✅ PostgreSQL connected via ZeroTier');
-});
+const poolCache = new Map();
 
-pool.on('error', (err) => {
-  console.error('❌ PostgreSQL Pool Error:', err.message);
-  process.exit(1);
-});
+const createPool = (name, credentials) => {
+  const pool = new Pool({
+    ...baseConfig,
+    user: credentials.user,
+    password: credentials.password,
+  });
 
-/**
- * Hàm query tiện lợi – dùng xuyên suốt controllers
- * @param {string} text  - SQL query string
- * @param {Array}  params - Query parameters (tránh SQL injection)
- */
-const query = (text, params) => pool.query(text, params);
+  pool.on('connect', () => {
+    console.log(`✅ PostgreSQL connected via ZeroTier (${name})`);
+  });
 
-/**
- * Dùng khi cần transaction (BEGIN / COMMIT / ROLLBACK)
- * Gọi: const client = await getClient()
- *       await client.query('BEGIN')
- *       ... các query ...
- *       await client.query('COMMIT')
- *       client.release()
- */
-const getClient = () => pool.connect();
+  pool.on('error', (err) => {
+    console.error(`❌ PostgreSQL Pool Error (${name}):`, err.message);
+    process.exit(1);
+  });
 
-/**
- * Query có RLS context – dùng cho các query cần PostgreSQL RLS hoạt động đúng.
- *
- * Cơ chế: lấy một dedicated client từ pool, SET LOCAL app.current_employee_id
- * và app.current_branch_id trong một transaction ngắn, chạy query thực sự trên
- * CÙNG connection đó, rồi release. SET LOCAL đảm bảo config chỉ sống trong
- * transaction này và không leak sang request khác dù pool tái dùng connection.
- *
- * Dùng thay thế db.query() ở các controller cần RLS:
- *   await db.queryCtx(req, `SELECT ...`, [params])
- *
- * @param {object} req    - Express request (cần req.user.maNV và req.user.maCN)
- * @param {string} text   - SQL query string
- * @param {Array}  params - Query parameters
- * @returns {Promise<QueryResult>}
- */
-const queryCtx = async (req, text, params) => {
+  return pool;
+};
+
+const getOrCreatePool = (name, credentials) => {
+  if (!poolCache.has(name)) {
+    poolCache.set(name, createPool(name, credentials));
+  }
+  return poolCache.get(name);
+};
+
+const servicePool = getOrCreatePool('auth', DEFAULT_DB_USERS.auth);
+
+const resolvePoolKeyByRole = (vaiTro) => {
+  if (vaiTro === 'admin') return 'admin';
+  if (vaiTro === 'giam_doc_van_hanh') return 'giam_doc_van_hanh';
+  if (vaiTro === 'quan_ly_chinhanh') return 'quan_ly_chinhanh';
+  if (vaiTro === 'thu_ngan') return 'thu_ngan';
+  if (vaiTro === 'kho') return 'kho';
+  if (vaiTro === 'hr') return 'hr';
+  return 'auth';
+};
+
+const getPoolByRole = (vaiTro) => {
+  const key = resolvePoolKeyByRole(vaiTro);
+  return getOrCreatePool(key, DEFAULT_DB_USERS[key] || DEFAULT_DB_USERS.auth);
+};
+
+const setRequestContext = async (client, req) => {
   const maNV = req?.user?.maNV ? String(req.user.maNV) : '';
   const maCN = req?.user?.maCN ? String(req.user.maCN) : '';
+  await client.query(
+    `SELECT set_config('app.current_employee_id', $1, false),
+            set_config('app.current_branch_id',   $2, false)`,
+    [maNV, maCN]
+  );
+};
 
-  const client = await pool.connect();
+const clearRequestContext = async (client) => {
+  await client.query(
+    `SELECT set_config('app.current_employee_id', '', false),
+            set_config('app.current_branch_id',   '', false)`
+  );
+};
+
+const wrapRequestClient = (client) => {
+  const originalRelease = client.release.bind(client);
+  client.release = () => {
+    clearRequestContext(client)
+      .catch(() => {})
+      .finally(() => originalRelease());
+  };
+  return client;
+};
+
+const query = (text, params) => servicePool.query(text, params);
+
+const getClient = async () => servicePool.connect();
+
+const queryCtx = async (req, text, params) => {
+  const client = await getPoolByRole(req?.user?.vaiTro).connect();
   try {
-    await client.query('BEGIN');
-    await client.query(
-      `SELECT set_config('app.current_employee_id', $1, true),
-              set_config('app.current_branch_id',   $2, true)`,
-      [maNV, maCN]
-    );
-    const result = await client.query(text, params);
-    await client.query('COMMIT');
-    return result;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
+    await setRequestContext(client, req);
+    return await client.query(text, params);
   } finally {
-    client.release();
+    try {
+      await clearRequestContext(client);
+    } finally {
+      client.release();
+    }
   }
 };
 
-module.exports = { query, getClient, pool, queryCtx };
+const getClientCtx = async (req) => {
+  const client = await getPoolByRole(req?.user?.vaiTro).connect();
+  await setRequestContext(client, req);
+  return wrapRequestClient(client);
+};
+
+const bindRequestDb = (req) => ({
+  query: (text, params) => queryCtx(req, text, params),
+  queryCtx: (text, params) => queryCtx(req, text, params),
+  getClient: () => getClientCtx(req),
+  pool: getPoolByRole(req?.user?.vaiTro),
+});
+
+module.exports = {
+  pool: servicePool,
+  query,
+  getClient,
+  queryCtx,
+  getClientCtx,
+  bindRequestDb,
+  getPoolByRole,
+};

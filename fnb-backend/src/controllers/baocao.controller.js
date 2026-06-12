@@ -29,7 +29,7 @@ const dashboard = async (req, res, next) => {
     }
 
     const [doanhThu, chiPhi, canhBao] = await Promise.all([
-      db.query(
+      req.db.query(
         `SELECT COALESCE(SUM(TongTienHang),   0)  AS TongDoanhThuTho,
                 COALESCE(SUM(TongGiamGia),    0)  AS TongGiamGia,
                 COALESCE(SUM(TongThanhToan),  0)  AS DoanhThuThuan
@@ -37,13 +37,13 @@ const dashboard = async (req, res, next) => {
          WHERE Ngay = $1 ${doanhThuWhere}`,
         doanhThuParams
       ),
-      db.query(
+      req.db.query(
         `SELECT COUNT(*) AS SoHoaDon FROM HOADON
          WHERE TrangThai = 'Completed' AND NgayLap::DATE = $1
          ${hoaDonWhere}`,
         hoaDonParams
       ),
-      db.query(
+      req.db.query(
         `SELECT COUNT(*) AS SoCanhBao FROM v_CanhBaoTonKho
          ${canhBaoWhere}`,
         canhBaoParams
@@ -70,7 +70,7 @@ const doanhThuTheoNgay = async (req, res, next) => {
     const maCNWhere = maCN ? `AND MaCN = $2` : '';
     if (maCN) params.push(maCN);
 
-    const { rows } = await db.query(
+    const { rows } = await req.db.query(
       `SELECT Ngay,
                SUM(TongTienHang)  AS TongDoanhThuTho,
                SUM(TongGiamGia)   AS TongGiamGia,
@@ -93,7 +93,7 @@ const topSanPham = async (req, res, next) => {
     let rows = [];
 
     if (maCN) {
-      const { rows: branchRows } = await db.query(
+      const { rows: branchRows } = await req.db.query(
         `SELECT MaSP, TenSP, TongSoLuongBan, TongDoanhThu
          FROM mv_top_sanpham
          WHERE MaCN = $1
@@ -103,7 +103,7 @@ const topSanPham = async (req, res, next) => {
       );
       rows = branchRows;
     } else {
-      const { rows: systemRows } = await db.query(
+      const { rows: systemRows } = await req.db.query(
         `SELECT MaSP,
                 MAX(TenSP) AS TenSP,
                 SUM(TongSoLuongBan) AS TongSoLuongBan,
@@ -127,7 +127,7 @@ const canhBaoTonKho = async (req, res, next) => {
     const maCN = resolveBranchScope(req.user, req.query.maCN);
     const where = maCN ? `WHERE TenCN IN (SELECT TenCN FROM CHINHANH WHERE MaCN = $1)` : '';
     const params = maCN ? [maCN] : [];
-    const { rows } = await db.query(`SELECT * FROM v_CanhBaoTonKho ${where} ORDER BY SoLuongTon`, params);
+    const { rows } = await req.db.query(`SELECT * FROM v_CanhBaoTonKho ${where} ORDER BY SoLuongTon`, params);
     return success(res, rows);
   } catch (err) { next(err); }
 };
@@ -147,7 +147,7 @@ const bangLuong = async (req, res, next) => {
     }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
 
-    const { rows } = await db.query(
+    const { rows } = await req.db.query(
       `SELECT * FROM v_BangLuongNhanVien ${where} ORDER BY ThangNam, HoTen`, params
     );
     return success(res, rows);
@@ -157,7 +157,7 @@ const bangLuong = async (req, res, next) => {
 // POST /api/v1/bao-cao/lam-moi  (Refresh Materialized Views)
 const lamMoi = async (req, res, next) => {
   try {
-    await db.query(`CALL sp_RefreshAllMaterializedViews()`);
+    await req.db.query(`CALL sp_RefreshAllMaterializedViews()`);
     return success(res, null, 'Đã làm mới toàn bộ Materialized Views báo cáo.');
   } catch (err) { next(err); }
 };
