@@ -13,6 +13,7 @@
 -- Sử dụng khối DO để kiểm tra xem role đã tồn tại chưa nhằm tránh phát sinh lỗi ERROR
 DO $$
 BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'role_auth_service') THEN CREATE ROLE role_auth_service; END IF;
     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'role_admin') THEN CREATE ROLE role_admin; END IF;
     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'role_hq_manager') THEN CREATE ROLE role_hq_manager; END IF;
     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'role_branch_manager') THEN CREATE ROLE role_branch_manager; END IF;
@@ -26,6 +27,9 @@ END $$;
 -- PHẦN 2: PHÂN QUYỀN (GRANT/REVOKE)
 -- ============================================================
 
+-- 2.0 role_auth_service: chỉ dùng cho backend login/health
+GRANT SELECT ON TAIKHOAN, NHANVIEN, NHANVIEN_CHINHANH, CHINHANH TO role_auth_service;
+
 -- 2.1 role_readonly: chỉ SELECT trên views và materialized views
 GRANT SELECT ON v_BangLuongNhanVien  TO role_readonly;
 GRANT SELECT ON v_CanhBaoTonKho      TO role_readonly;
@@ -35,21 +39,33 @@ GRANT SELECT ON mv_doanhthu_ngay     TO role_readonly;
 GRANT SELECT ON mv_top_sanpham       TO role_readonly;
 
 -- 2.2 role_cashier: bán hàng tại quầy
-GRANT SELECT ON SANPHAM, LOAISANPHAM    TO role_cashier;
-GRANT SELECT ON KHACHHANG               TO role_cashier;
+GRANT SELECT ON SANPHAM, LOAISANPHAM, CONGTHUC, NGUYENLIEU TO role_cashier;
+GRANT SELECT, INSERT, UPDATE ON KHACHHANG      TO role_cashier;
 GRANT SELECT, INSERT, UPDATE ON HOADON  TO role_cashier;
 GRANT SELECT, INSERT, UPDATE, DELETE ON CHITIET_HOADON TO role_cashier;
 GRANT SELECT, INSERT ON THANHTOAN       TO role_cashier;
 GRANT SELECT ON CHINHANH                TO role_cashier;
-GRANT SELECT ON NHANVIEN                TO role_cashier;
+GRANT SELECT ON NHANVIEN, BOPHAN, NHANVIEN_CHINHANH TO role_cashier;
+GRANT SELECT ON CALAM, PHANCONG         TO role_cashier;
+GRANT SELECT, UPDATE ON TONKHO_CHINHANH TO role_cashier;
+GRANT SELECT, INSERT ON NHATKYKHO       TO role_cashier;
+GRANT SELECT, INSERT ON PHIEUCHI        TO role_cashier;
+GRANT SELECT, UPDATE ON TAIKHOAN        TO role_cashier;
 GRANT SELECT ON v_HoaDonChiTiet         TO role_cashier;
+GRANT USAGE, SELECT ON SEQUENCE nhatkykho_malog_seq TO role_cashier;
 
 -- 2.3 role_warehouse_staff: quản lý kho
-GRANT SELECT ON NGUYENLIEU, TONKHO_CHINHANH, NHATKYKHO TO role_warehouse_staff;
+GRANT SELECT, INSERT, UPDATE ON NGUYENLIEU                TO role_warehouse_staff;
+GRANT SELECT, UPDATE ON TONKHO_CHINHANH                  TO role_warehouse_staff;
+GRANT SELECT, INSERT ON NHATKYKHO                        TO role_warehouse_staff;
 GRANT SELECT, INSERT, UPDATE ON PHIEUNHAP               TO role_warehouse_staff;
 GRANT SELECT, INSERT, UPDATE, DELETE ON CHITIET_PHIEUNHAP TO role_warehouse_staff;
 GRANT SELECT ON v_CanhBaoTonKho                         TO role_warehouse_staff;
 GRANT SELECT ON NHACUNGCAP                              TO role_warehouse_staff;
+GRANT SELECT ON CALAM, PHANCONG, NHANVIEN, BOPHAN, NHANVIEN_CHINHANH, CHINHANH TO role_warehouse_staff;
+GRANT SELECT, INSERT ON PHIEUCHI                        TO role_warehouse_staff;
+GRANT SELECT, UPDATE ON TAIKHOAN                        TO role_warehouse_staff;
+GRANT USAGE, SELECT ON SEQUENCE nhatkykho_malog_seq TO role_warehouse_staff;
 
 -- 2.4 role_hr_staff: quản lý nhân sự
 GRANT SELECT ON NHANVIEN, BOPHAN, CALAM, PHANCONG, NHANVIEN_CHINHANH TO role_hr_staff;
@@ -63,6 +79,7 @@ GRANT role_cashier           TO role_branch_manager;
 GRANT role_warehouse_staff   TO role_branch_manager;
 GRANT role_hr_staff          TO role_branch_manager;
 GRANT SELECT, INSERT, UPDATE ON PHIEUCHI TO role_branch_manager;
+GRANT SELECT, INSERT, UPDATE ON SANPHAM, LOAISANPHAM, CONGTHUC TO role_branch_manager;
 GRANT SELECT ON mv_doanhthu_ngay, mv_top_sanpham TO role_branch_manager;
 GRANT SELECT ON v_TongHopTaiChinh  TO role_branch_manager;
 GRANT SELECT ON TAIKHOAN TO role_branch_manager;
@@ -91,6 +108,7 @@ GRANT ALL PRIVILEGES ON ALL PROCEDURES IN SCHEMA public TO role_admin;
 -- Tạo user thực tế sử dụng khối DO để bỏ qua nếu user đã tồn tại sẵn trong hệ thống
 DO $$
 BEGIN
+    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'app_auth_user') THEN CREATE USER app_auth_user WITH PASSWORD 'Auth@Service2026!' VALID UNTIL '2027-01-01'; END IF;
     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'app_admin') THEN CREATE USER app_admin WITH PASSWORD 'Admin@Str0ng!2026' VALID UNTIL '2027-01-01'; END IF;
     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'app_cashier_user') THEN CREATE USER app_cashier_user WITH PASSWORD 'Cash!er2026' VALID UNTIL '2027-01-01'; END IF;
     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'app_warehouse_user') THEN CREATE USER app_warehouse_user WITH PASSWORD 'War3house2026!' VALID UNTIL '2027-01-01'; END IF;
@@ -101,6 +119,7 @@ BEGIN
 END $$;
 
 -- Gán role cho user
+GRANT role_auth_service    TO app_auth_user;
 GRANT role_admin           TO app_admin;
 GRANT role_cashier         TO app_cashier_user;
 GRANT role_warehouse_staff TO app_warehouse_user;
@@ -115,7 +134,10 @@ GRANT role_readonly        TO app_readonly_user;
 
 -- Bật RLS trên các bảng nhạy cảm theo chi nhánh
 ALTER TABLE HOADON              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE CHITIET_HOADON      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE THANHTOAN           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE PHIEUNHAP           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE CHITIET_PHIEUNHAP   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE PHIEUCHI            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE TONKHO_CHINHANH     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE NHATKYKHO           ENABLE ROW LEVEL SECURITY;
@@ -131,43 +153,163 @@ LANGUAGE sql STABLE AS $$
       AND (DenNgay IS NULL OR DenNgay >= CURRENT_DATE);
 $$;
 
+CREATE OR REPLACE FUNCTION fn_can_access_branch(p_macn VARCHAR(20))
+RETURNS BOOLEAN
+LANGUAGE sql STABLE AS $$
+    SELECT
+        pg_has_role(current_user, 'role_admin', 'MEMBER')
+        OR pg_has_role(current_user, 'role_hq_manager', 'MEMBER')
+        OR p_macn IN (SELECT macn FROM fn_get_current_user_branches());
+$$;
+
 -- Policy: Branch Manager chỉ thấy dữ liệu chi nhánh của mình
 -- Xoá policy cũ trước nếu có để tránh lỗi trùng lặp khi chạy lại file
 DROP POLICY IF EXISTS policy_hoadon_branch ON HOADON;
 CREATE POLICY policy_hoadon_branch ON HOADON
+    FOR ALL
+    USING (fn_can_access_branch(MaCN))
+    WITH CHECK (fn_can_access_branch(MaCN));
+
+DROP POLICY IF EXISTS policy_ct_hoadon_branch ON CHITIET_HOADON;
+CREATE POLICY policy_ct_hoadon_branch ON CHITIET_HOADON
+    FOR ALL
     USING (
-        pg_has_role(current_user, 'role_admin', 'MEMBER')
-        OR MaCN IN (SELECT macn FROM fn_get_current_user_branches())
+        EXISTS (
+            SELECT 1
+            FROM HOADON hd
+            WHERE hd.MaHD = CHITIET_HOADON.MaHD
+              AND fn_can_access_branch(hd.MaCN)
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1
+            FROM HOADON hd
+            WHERE hd.MaHD = CHITIET_HOADON.MaHD
+              AND fn_can_access_branch(hd.MaCN)
+        )
+    );
+
+DROP POLICY IF EXISTS policy_thanhtoan_branch ON THANHTOAN;
+CREATE POLICY policy_thanhtoan_branch ON THANHTOAN
+    FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1
+            FROM HOADON hd
+            WHERE hd.MaHD = THANHTOAN.MaHD
+              AND fn_can_access_branch(hd.MaCN)
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1
+            FROM HOADON hd
+            WHERE hd.MaHD = THANHTOAN.MaHD
+              AND fn_can_access_branch(hd.MaCN)
+        )
     );
 
 DROP POLICY IF EXISTS policy_phieunhap_branch ON PHIEUNHAP;
 CREATE POLICY policy_phieunhap_branch ON PHIEUNHAP
+    FOR ALL
+    USING (fn_can_access_branch(MaCN))
+    WITH CHECK (fn_can_access_branch(MaCN));
+
+DROP POLICY IF EXISTS policy_ct_phieunhap_branch ON CHITIET_PHIEUNHAP;
+CREATE POLICY policy_ct_phieunhap_branch ON CHITIET_PHIEUNHAP
+    FOR ALL
     USING (
-        pg_has_role(current_user, 'role_admin', 'MEMBER')
-        OR MaCN IN (SELECT macn FROM fn_get_current_user_branches())
+        EXISTS (
+            SELECT 1
+            FROM PHIEUNHAP pn
+            WHERE pn.MaPN = CHITIET_PHIEUNHAP.MaPN
+              AND fn_can_access_branch(pn.MaCN)
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1
+            FROM PHIEUNHAP pn
+            WHERE pn.MaPN = CHITIET_PHIEUNHAP.MaPN
+              AND fn_can_access_branch(pn.MaCN)
+        )
     );
+
+DROP POLICY IF EXISTS policy_phieuchi_branch ON PHIEUCHI;
+CREATE POLICY policy_phieuchi_branch ON PHIEUCHI
+    FOR ALL
+    USING (fn_can_access_branch(MaCN))
+    WITH CHECK (fn_can_access_branch(MaCN));
 
 DROP POLICY IF EXISTS policy_tonkho_branch ON TONKHO_CHINHANH;
 CREATE POLICY policy_tonkho_branch ON TONKHO_CHINHANH
-    USING (
-        pg_has_role(current_user, 'role_admin', 'MEMBER')
-        OR MaCN IN (SELECT macn FROM fn_get_current_user_branches())
-    );
+    FOR ALL
+    USING (fn_can_access_branch(MaCN))
+    WITH CHECK (fn_can_access_branch(MaCN));
+
+DROP POLICY IF EXISTS policy_nhatkykho_branch ON NHATKYKHO;
+CREATE POLICY policy_nhatkykho_branch ON NHATKYKHO
+    FOR ALL
+    USING (fn_can_access_branch(MaCN))
+    WITH CHECK (fn_can_access_branch(MaCN));
+
+DROP POLICY IF EXISTS policy_phancong_branch ON PHANCONG;
+CREATE POLICY policy_phancong_branch ON PHANCONG
+    FOR ALL
+    USING (fn_can_access_branch(MaCN))
+    WITH CHECK (fn_can_access_branch(MaCN));
 
 -- Tạo Policy cho bảng TAIKHOAN
-DROP POLICY IF EXISTS policy_taikhoan_security ON TAIKHOAN;
-CREATE POLICY policy_taikhoan_security ON TAIKHOAN
+DROP POLICY IF EXISTS policy_taikhoan_select ON TAIKHOAN;
+CREATE POLICY policy_taikhoan_select ON TAIKHOAN
+    FOR SELECT
     USING (
-        -- 1. Admin được xem toàn bộ
+        pg_has_role(current_user, 'role_auth_service', 'MEMBER')
+        OR
         pg_has_role(current_user, 'role_admin', 'MEMBER')
-        -- 2. Quản lý tổng (HQ) hoặc Nhân sự (HR) được xem toàn bộ tài khoản để quản lý
         OR pg_has_role(current_user, 'role_hq_manager', 'MEMBER')
         OR pg_has_role(current_user, 'role_hr_staff', 'MEMBER')
-        -- 3. Chính nhân viên đó ĐƯỢC XEM tài khoản của chính mình (để đổi mật khẩu, xem profile)
         OR MaNV = current_setting('app.current_employee_id', true)
-        -- 4. Branch Manager chỉ xem được tài khoản của nhân viên thuộc chi nhánh mình quản lý
         OR MaNV IN (
             SELECT MaNV FROM NHANVIEN_CHINHANH 
+            WHERE MaCN IN (SELECT macn FROM fn_get_current_user_branches())
+        )
+    );
+
+DROP POLICY IF EXISTS policy_taikhoan_update ON TAIKHOAN;
+CREATE POLICY policy_taikhoan_update ON TAIKHOAN
+    FOR UPDATE
+    USING (
+        pg_has_role(current_user, 'role_admin', 'MEMBER')
+        OR pg_has_role(current_user, 'role_hq_manager', 'MEMBER')
+        OR pg_has_role(current_user, 'role_hr_staff', 'MEMBER')
+        OR MaNV = current_setting('app.current_employee_id', true)
+        OR MaNV IN (
+            SELECT MaNV FROM NHANVIEN_CHINHANH
+            WHERE MaCN IN (SELECT macn FROM fn_get_current_user_branches())
+        )
+    )
+    WITH CHECK (
+        pg_has_role(current_user, 'role_admin', 'MEMBER')
+        OR pg_has_role(current_user, 'role_hq_manager', 'MEMBER')
+        OR pg_has_role(current_user, 'role_hr_staff', 'MEMBER')
+        OR MaNV = current_setting('app.current_employee_id', true)
+        OR MaNV IN (
+            SELECT MaNV FROM NHANVIEN_CHINHANH
+            WHERE MaCN IN (SELECT macn FROM fn_get_current_user_branches())
+        )
+    );
+
+DROP POLICY IF EXISTS policy_taikhoan_insert ON TAIKHOAN;
+CREATE POLICY policy_taikhoan_insert ON TAIKHOAN
+    FOR INSERT
+    WITH CHECK (
+        pg_has_role(current_user, 'role_admin', 'MEMBER')
+        OR pg_has_role(current_user, 'role_hq_manager', 'MEMBER')
+        OR pg_has_role(current_user, 'role_hr_staff', 'MEMBER')
+        OR MaNV IN (
+            SELECT MaNV FROM NHANVIEN_CHINHANH
             WHERE MaCN IN (SELECT macn FROM fn_get_current_user_branches())
         )
     );
