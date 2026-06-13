@@ -10,6 +10,37 @@
 -- ============================================================
 
 -- ------------------------------------------------------------
+-- 1.0 Trigger: Tự động điền MaCNN
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_auto_fill_macn_if_null()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_macn_detected VARCHAR(20);
+BEGIN
+    IF TG_TABLE_NAME = 'hoadon' AND NEW.MaCN IS NULL THEN
+        SELECT MaCN INTO v_macn_detected FROM NHANVIEN_CHINHANH WHERE MaNV = NEW.MaNV AND DenNgay IS NULL LIMIT 1;
+        NEW.MaCN := COALESCE(v_macn_detected, (SELECT MaCN FROM CHINHANH LIMIT 1));
+    END IF;
+
+    IF TG_TABLE_NAME = 'phieunhap' AND NEW.MaCN IS NULL THEN
+        SELECT MaCN INTO v_macn_detected FROM NHANVIEN_CHINHANH WHERE MaNV = NEW.MaNVLap AND DenNgay IS NULL LIMIT 1;
+        NEW.MaCN := COALESCE(v_macn_detected, (SELECT MaCN FROM CHINHANH LIMIT 1));
+    END IF;
+
+    IF TG_TABLE_NAME = 'phancong' AND NEW.MaCN IS NULL THEN
+        SELECT MaCN INTO v_macn_detected FROM NHANVIEN_CHINHANH WHERE MaNV = NEW.MaNV AND DenNgay IS NULL LIMIT 1;
+        NEW.MaCN := COALESCE(v_macn_detected, (SELECT MaCN FROM CHINHANH LIMIT 1));
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_hoadon_auto_macn BEFORE INSERT ON HOADON FOR EACH ROW EXECUTE FUNCTION fn_auto_fill_macn_if_null();
+CREATE TRIGGER trg_phieunhap_auto_macn BEFORE INSERT ON PHIEUNHAP FOR EACH ROW EXECUTE FUNCTION fn_auto_fill_macn_if_null();
+CREATE TRIGGER trg_phancong_auto_macn BEFORE INSERT ON PHANCONG FOR EACH ROW EXECUTE FUNCTION fn_auto_fill_macn_if_null();
+
+-- ------------------------------------------------------------
 -- 1.1 Trigger: Tính lại TongTienHang & TongThanhToan cho HOADON
 -- Kích hoạt sau INSERT/UPDATE/DELETE trên CHITIET_HOADON
 -- ------------------------------------------------------------
@@ -334,25 +365,52 @@ BEGIN
     FROM   PHANCONG pc
     JOIN   CALAM cl ON cl.MaCL = pc.MaCL
     WHERE  pc.MaNV   = NEW.MaNV
-      AND  pc.Ngay   = NEW.Ngay
+      AND  pc.NgayPhanCong = NEW.NgayPhanCong
       AND  pc.TrangThai NOT IN ('Cancelled')
-      AND  (pc.MaCL, pc.MaCN) <> (NEW.MaCL, NEW.MaCN)
+      AND  pc.MaPC <> COALESCE(NEW.MaPC, '')
       AND  (cl.GioBatDau, cl.GioKetThuc) OVERLAPS (v_new_start, v_new_end);
 
     IF v_conflict > 0 THEN
-        RAISE EXCEPTION 'Nhân viên % đã được phân công ca trùng giờ vào ngày %', NEW.MaNV, NEW.Ngay;
+        RAISE EXCEPTION 'Nhân viên % đã được phân công ca trùng giờ vào ngày %', NEW.MaNV, NEW.NgayPhanCong;
     END IF;
 
     RETURN NEW;
 END;
 $$;
-
 CREATE TRIGGER trg_phancong_check_conflict
 BEFORE INSERT OR UPDATE ON PHANCONG
 FOR EACH ROW EXECUTE FUNCTION fn_check_shift_conflict();
 
 -- ------------------------------------------------------------
--- 1.8 Trigger: Tự động cập nhật UpdatedAt
+-- 1.8 Trigger: Tích điểm khách hàng 
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_tich_diem_khach_hang()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_diem_cong INT;
+    v_diem_moi  INT;
+BEGIN
+    IF (NEW.TrangThai = 'Completed' AND NEW.MaKH IS NOT NULL) THEN
+        v_diem_cong := FLOOR(NEW.TongThanhToan * 0.01);
+        IF v_diem_cong < 1 AND NEW.TongThanhToan > 0 THEN v_diem_cong := 1; END IF;
+
+        UPDATE KHACHHANG SET DiemTichLuy = DiemTichLuy + v_diem_cong WHERE MaKH = NEW.MaKH RETURNING DiemTichLuy INTO v_diem_moi;
+
+        UPDATE KHACHHANG SET HangThanhVien = CASE 
+            WHEN v_diem_moi >= 19000 THEN 'Platinum'
+            WHEN v_diem_moi >= 15000 THEN 'Gold'
+            WHEN v_diem_moi >= 10000 THEN 'Silver'
+            ELSE 'Bronze'
+        END WHERE MaKH = NEW.MaKH;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_hoadon_tich_diem AFTER INSERT OR UPDATE ON HOADON FOR EACH ROW EXECUTE FUNCTION fn_tich_diem_khach_hang();
+
+-- ------------------------------------------------------------
+-- 1.9 Trigger: Tự động cập nhật UpdatedAt
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_set_updatedat()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
@@ -492,8 +550,8 @@ BEGIN
 
     v_hang_moi := CASE
         WHEN v_diem_moi >= 15000 THEN 'Platinum'
-        WHEN v_diem_moi >= 5000  THEN 'Gold'
-        WHEN v_diem_moi >= 1000  THEN 'Silver'
+        WHEN v_diem_moi >= 10000  THEN 'Gold'
+        WHEN v_diem_moi >= 5000  THEN 'Silver'
         ELSE 'Bronze'
     END;
 
@@ -585,7 +643,7 @@ CREATE SEQUENCE IF NOT EXISTS seq_hoadon START 1;
 CREATE OR REPLACE VIEW v_BangLuongNhanVien AS
 SELECT
     nv.MaNV, nv.HoTen, bp.TenBP, cn.TenCN,
-    TO_CHAR(pc.Ngay, 'MM/YYYY')    AS ThangNam,
+    TO_CHAR(pc.NgayPhanCong, 'MM/YYYY')    AS ThangNam,
     COUNT(pc.MaCL)                 AS TongCaLam,
     nv.DonGiaCa,
     COUNT(pc.MaCL) * nv.DonGiaCa   AS TongLuong
@@ -594,7 +652,7 @@ JOIN  BOPHAN   bp ON bp.MaBP = nv.MaBP
 LEFT JOIN PHANCONG  pc ON pc.MaNV = nv.MaNV AND pc.TrangThai = 'Done'
 LEFT JOIN CHINHANH  cn ON cn.MaCN = pc.MaCN
 WHERE nv.TrangThai = 'Active'
-GROUP BY nv.MaNV, nv.HoTen, bp.TenBP, cn.TenCN, TO_CHAR(pc.Ngay, 'MM/YYYY'), nv.DonGiaCa;
+GROUP BY nv.MaNV, nv.HoTen, bp.TenBP, cn.TenCN, TO_CHAR(pc.NgayPhanCong, 'MM/YYYY'), nv.DonGiaCa;
 
 -- ------------------------------------------------------------
 -- 3.2 VIEW: Tồn kho thấp dưới mức tối thiểu (cảnh báo hệ thống)
@@ -699,23 +757,13 @@ $$;
 -- Tự động khóa tài khoản khi nhân viên nghỉ việc (An toàn bảo mật)
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_deactivate_account_on_hr_change()
-RETURNS TRIGGER
-LANGUAGE plpgsql AS $$
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
-    -- Nếu nhân viên bị chuyển sang trạng thái nghỉ việc hoặc đình chỉ
     IF NEW.TrangThai IN ('Resigned', 'Suspended') THEN
-        UPDATE TAIKHOAN
-        SET    IsActive = FALSE,
-               UpdatedAt = NOW()
-        WHERE  MaNV = NEW.MaNV;
-    -- Nếu nhân viên được kích hoạt hoạt động trở lại
+        UPDATE TAIKHOAN SET IsActive = FALSE, UpdatedAt = NOW() WHERE MaNV = NEW.MaNV;
     ELSIF NEW.TrangThai = 'Active' THEN
-        UPDATE TAIKHOAN
-        SET    IsActive = TRUE,
-               UpdatedAt = NOW()
-        WHERE  MaNV = NEW.MaNV;
+        UPDATE TAIKHOAN SET IsActive = TRUE, UpdatedAt = NOW() WHERE MaNV = NEW.MaNV;
     END IF;
-    
     RETURN NEW;
 END;
 $$;

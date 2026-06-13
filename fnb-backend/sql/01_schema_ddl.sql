@@ -24,12 +24,23 @@ DROP TABLE IF EXISTS NHANVIEN          CASCADE;
 DROP TABLE IF EXISTS CALAM             CASCADE;
 DROP TABLE IF EXISTS BOPHAN            CASCADE;
 DROP TABLE IF EXISTS SANPHAM           CASCADE;
--- LOAISANPHAM phải xoá sau SANPHAM vì SANPHAM references nó
-DROP TABLE IF EXISTS SANPHAM           CASCADE;
 DROP TABLE IF EXISTS LOAISANPHAM       CASCADE;
 DROP TABLE IF EXISTS NGUYENLIEU        CASCADE;
 DROP TABLE IF EXISTS NHACUNGCAP        CASCADE;
 DROP TABLE IF EXISTS CHINHANH          CASCADE;
+
+-- ============================================================
+-- VÁ LỖI ĐỒNG BỘ: HÀM LPAD CHO KIỂU BIGINT
+-- ============================================================
+CREATE OR REPLACE FUNCTION lpad(string_to_pad bigint, length integer, pad_string text)
+RETURNS text AS $$
+BEGIN
+    RETURN lpad(string_to_pad::text, length, pad_string);
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- Kích hoạt thư viện mã hóa mật khẩu Bcrypt hệ thống
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ============================================================
 -- DOMAIN 1: CHI NHÁNH (Branch)
@@ -70,7 +81,7 @@ CREATE TABLE NHANVIEN (
     NgaySinh    DATE           CHECK (NgaySinh <= CURRENT_DATE - INTERVAL '16 years'),
     SDT         VARCHAR(15)    UNIQUE NOT NULL,
     Email       VARCHAR(100)   UNIQUE,
-    DonGiaCa    NUMERIC(15,2)  NOT NULL CHECK (DonGiaCa > 0),
+    DonGiaCa    NUMERIC(15,2)  NOT NULL DEFAULT 0 CHECK (DonGiaCa >= 0), -- VÁ LỖI CHECK CONSTRAINT CHO BACKEND
     TrangThai   VARCHAR(20)    NOT NULL DEFAULT 'Active'
                                CHECK (TrangThai IN ('Active', 'Resigned', 'Suspended')),
     MaBP        VARCHAR(20)    NOT NULL REFERENCES BOPHAN(MaBP)
@@ -145,20 +156,21 @@ COMMENT ON TABLE  CALAM             IS 'Danh mục ca làm việc (Morning Shift
 COMMENT ON COLUMN CALAM.GioBatDau   IS 'Hệ thống giả định ca trong cùng ngày; chưa hỗ trợ ca qua đêm';
 
 CREATE TABLE PHANCONG (
-    MaNV        VARCHAR(20)  NOT NULL REFERENCES NHANVIEN(MaNV) ON DELETE RESTRICT,
-    MaCN        VARCHAR(20)  NOT NULL REFERENCES CHINHANH(MaCN) ON DELETE RESTRICT,
-    MaCL        VARCHAR(20)  NOT NULL REFERENCES CALAM(MaCL) ON DELETE RESTRICT,
-    Ngay        DATE         NOT NULL,
-    TrangThai   VARCHAR(20)  NOT NULL DEFAULT 'Assigned'
-                             CHECK (TrangThai IN ('Assigned', 'Done', 'Absent', 'Cancelled')),
-    PRIMARY KEY (MaNV, MaCN, MaCL, Ngay)
+    MaPC         VARCHAR(20)    PRIMARY KEY,
+    MaNV         VARCHAR(20)    NOT NULL,
+    MaCN         VARCHAR(20)    NOT NULL,
+    MaCL         VARCHAR(20)    NOT NULL, 
+    NgayPhanCong DATE          NOT NULL,
+    TrangThai    VARCHAR(20)    NOT NULL DEFAULT 'Scheduled',
+    CreatedAt    TIMESTAMP      NOT NULL DEFAULT NOW()
 );
 
 COMMENT ON TABLE  PHANCONG         IS 'Phân công ca làm việc theo ngày và chi nhánh';
 COMMENT ON COLUMN PHANCONG.TrangThai IS 'Assigned: đã phân | Done: đã làm | Absent: vắng | Cancelled: huỷ';
 
-CREATE INDEX idx_phancong_manv_ngay ON PHANCONG USING BTREE (MaNV, Ngay);
-CREATE INDEX idx_phancong_macn_ngay ON PHANCONG USING BTREE (MaCN, Ngay);
+-- VÁ LỖI SỬA TÊN CỘT ĐỒNG NHẤT: Đổi "Ngay" thành "NgayPhanCong"
+CREATE INDEX idx_phancong_manv_ngay ON PHANCONG USING BTREE (MaNV, NgayPhanCong);
+CREATE INDEX idx_phancong_macn_ngay ON PHANCONG USING BTREE (MaCN, NgayPhanCong);
 
 -- ============================================================
 -- DOMAIN 2: THỰC ĐƠN (Menu)
@@ -332,7 +344,7 @@ CREATE TABLE KHACHHANG (
     NgaySinh        DATE,
     DiemTichLuy     INTEGER      NOT NULL DEFAULT 0 CHECK (DiemTichLuy >= 0),
     HangThanhVien   VARCHAR(20)  NOT NULL DEFAULT 'Bronze'
-                                 CHECK (HangThanhVien IN ('Bronze', 'Silver', 'Gold', 'Platinum')),
+                                 CHECK (HangThanhVien IN ('Bronze', 'Silver', 'Gold', 'Platinum')), 
     TrangThai       VARCHAR(20)  NOT NULL DEFAULT 'Active'
                                  CHECK (TrangThai IN ('Active', 'Inactive')),
     CreatedAt       TIMESTAMP    NOT NULL DEFAULT NOW(),
@@ -341,7 +353,7 @@ CREATE TABLE KHACHHANG (
 
 COMMENT ON TABLE  KHACHHANG                IS 'Khách hàng thành viên (loyalty)';
 COMMENT ON COLUMN KHACHHANG.DiemTichLuy    IS 'Tự động cộng qua Stored Procedure khi hóa đơn hoàn tất';
-COMMENT ON COLUMN KHACHHANG.HangThanhVien  IS 'Bronze(<1000đ) Silver(1000-5000) Gold(5000-15000) Platinum(>15000đ tích lũy)';
+COMMENT ON COLUMN KHACHHANG.HangThanhVien  IS 'Bronze(<5k) Silver(5k-10k) Gold(10k-15k) Platinum(>=15k)';
 
 CREATE INDEX idx_khachhang_sdt   ON KHACHHANG USING BTREE (SDT);
 CREATE INDEX idx_khachhang_hoten ON KHACHHANG USING BTREE (HoTen);
@@ -461,3 +473,22 @@ COMMENT ON COLUMN PHIEUCHI.LoaiChi IS 'Loại chi phí: điện, nước, intern
 
 CREATE INDEX idx_phieuchi_macn    ON PHIEUCHI USING BTREE (MaCN);
 CREATE INDEX idx_phieuchi_ngaychi ON PHIEUCHI USING BTREE (NgayChi DESC);
+
+-- ============================================================
+-- CẤU HÌNH KHÓA NGOẠI AN TOÀN CHO BẢNG PHANCONG  
+-- ============================================================
+
+-- 1. Khóa ngoại liên kết với bảng NHANVIEN (Hỗ trợ ON DELETE CASCADE để xóa phân công ca trơn tru từ UI)
+ALTER TABLE PHANCONG DROP CONSTRAINT IF EXISTS phancong_manv_fkey;
+ALTER TABLE PHANCONG ADD CONSTRAINT phancong_manv_fkey 
+    FOREIGN KEY (MaNV) REFERENCES NHANVIEN(MaNV) ON DELETE CASCADE;
+
+-- 2. Khóa ngoại liên kết với bảng CHINHANH
+ALTER TABLE PHANCONG DROP CONSTRAINT IF EXISTS phancong_macn_fkey;
+ALTER TABLE PHANCONG ADD CONSTRAINT phancong_macn_fkey 
+    FOREIGN KEY (MaCN) REFERENCES CHINHANH(MaCN) ON DELETE RESTRICT;
+
+-- 3. Khóa ngoại liên kết với bảng CALAM (Khớp với trường dữ liệu MaCL)
+ALTER TABLE PHANCONG DROP CONSTRAINT IF EXISTS phancong_maca_fkey;
+ALTER TABLE PHANCONG ADD CONSTRAINT phancong_maca_fkey 
+    FOREIGN KEY (MaCL) REFERENCES CALAM(MaCL) ON DELETE RESTRICT;

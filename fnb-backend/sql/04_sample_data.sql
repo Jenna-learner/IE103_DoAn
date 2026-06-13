@@ -11,10 +11,15 @@ SET session_replication_role = 'replica';
 -- ============================================================
 -- TẦNG 0: CHI NHÁNH (Bắt buộc phải có để gán dữ liệu)
 -- ============================================================
+-- ĐOẠN CODE ĐÃ ĐƯỢC CHUẨN HÓA ĐỒNG BỘ:
 INSERT INTO CHINHANH (MaCN, TenCN, DiaChi, SDT, Email, TrangThai)
 SELECT 
-    'CN' || i, 'Chi Nhánh ' || i, 'Địa chỉ CN ' || i, 
-    '090' || LPAD(i::text, 7, '0'), 'cn'||i||'@fnb.vn', 'Active'
+    'CN' || LPAD(i::text, 3, '0'), 
+    'Chi Nhánh ' || i, 
+    'Địa chỉ CN ' || i, 
+    '090' || LPAD(i::text, 7, '0'), 
+    'cn'||i||'@fnb.vn', 
+    'Active'
 FROM generate_series(1, 10) i 
 ON CONFLICT DO NOTHING;
 
@@ -157,27 +162,52 @@ ON CONFLICT DO NOTHING;
 
 -- 5. Bộ phận
 INSERT INTO BOPHAN (MaBP, TenBP) VALUES 
-('BP1', 'Management'), ('BP2', 'Kitchen/Bar'), ('BP3', 'Service'), 
-('BP4', 'Security'), ('BP5', 'Janitor') 
-ON CONFLICT DO NOTHING;
+('BP001', 'Management'), 
+('BP002', 'Kitchen/Bar'), 
+('BP003', 'Service'), 
+('BP004', 'Security'), 
+('BP005', 'Janitor') 
+ON CONFLICT (MaBP) DO NOTHING;
 
 -- 6. Nhân viên
 INSERT INTO NHANVIEN (MaNV, HoTen, NgaySinh, SDT, DonGiaCa, TrangThai, MaBP)
 SELECT 
-    'NV'||i, 'Nhân viên '||i, 
+    'NV' || LPAD(i::text, 3, '0'), 
+    'Nhân viên '||i, 
     '1990-01-01'::date + (random()*5000)::int * interval '1 day',
     '03'||LPAD(i::text, 8, '0'), (floor(random()*15 + 15)) * 10000, 
-    'Active', 'BP'||(floor(random()*5)+1)
+    'Active', 'BP'||LPAD((floor(random()*5)+1)::text, 3, '0') 
 FROM generate_series(1, 500) i 
-ON CONFLICT DO NOTHING;
+ON CONFLICT (MaNV) DO NOTHING;
 
 -- 7. Khách hàng
+WITH khachhang_seed AS (
+    SELECT 
+        'KH' || i AS MaKH,
+        'Khách hàng ' || i AS HoTen,
+        '08' || LPAD(i::text, 8, '0') AS SDT,
+        FLOOR(RANDOM() * 25000)::INT AS DiemTichLuy -- Sinh ngẫu nhiên điểm từ 0 đến 25,000
+    FROM generate_series(1, 5000) i
+)
 INSERT INTO KHACHHANG (MaKH, HoTen, SDT, DiemTichLuy, HangThanhVien)
 SELECT 
-    'KH'||i, 'Khách hàng '||i, '08'||LPAD(i::text, 8, '0'), floor(random()*20000),
-    (ARRAY['Bronze', 'Silver', 'Gold', 'Platinum'])[floor(random()*4)+1]
-FROM generate_series(1, 5000) i 
-ON CONFLICT DO NOTHING;
+    MaKH,
+    HoTen,
+    SDT,
+    DiemTichLuy,
+    -- Ép logic phân hạng dựa theo số điểm vừa được sinh ra ở trên
+    CASE 
+        WHEN DiemTichLuy >= 15000 THEN 'Platinum'
+        WHEN DiemTichLuy >= 10000 THEN 'Gold'
+        WHEN DiemTichLuy >= 5000 THEN 'Silver'
+        ELSE 'Bronze'
+    END AS HangThanhVien
+FROM khachhang_seed
+ON CONFLICT (MaKH) DO UPDATE 
+SET HoTen = EXCLUDED.HoTen,
+    SDT = EXCLUDED.SDT,
+    DiemTichLuy = EXCLUDED.DiemTichLuy,
+    HangThanhVien = EXCLUDED.HangThanhVien;
 
 -- 8. Nhà cung cấp
 INSERT INTO NHACUNGCAP (MaNCC, TenNCC, SDT, DiaChi, Email)
@@ -189,10 +219,10 @@ ON CONFLICT DO NOTHING;
 
 -- 9. Ca làm
 INSERT INTO CALAM (MaCL, TenCL, GioBatDau, GioKetThuc) VALUES 
-('CL1', 'Morning Shift', '06:00', '12:00'), 
-('CL2', 'Afternoon Shift', '12:00', '18:00'), 
-('CL3', 'Night Shift', '18:00', '23:59:59')
-ON CONFLICT DO NOTHING;
+('CL001', 'Morning Shift', '06:00', '12:00'), 
+('CL002', 'Afternoon Shift', '12:00', '18:00'), 
+('CL003', 'Night Shift', '18:00', '23:59:59')
+ON CONFLICT (MaCL) DO NOTHING; 
 
 -- ============================================================
 -- TẦNG 3: GIAO DỊCH VÀ CHỨNG TỪ (HEAVY LOAD)
@@ -261,15 +291,16 @@ FROM generate_series(1, 100000) i
 ON CONFLICT DO NOTHING;
 
 -- 4. Phân công ca làm
-INSERT INTO PHANCONG (MaNV, MaCN, MaCL, Ngay, TrangThai)
+INSERT INTO PHANCONG (MaPC, MaNV, MaCN, MaCL, NgayPhanCong, TrangThai)
 SELECT 
-    'NV'||(floor(random()*500)+1),
-    'CN'||(floor(random()*10)+1),
-    'CL'||(floor(random()*3)+1),
-    CURRENT_DATE - (i * interval '1 day'),
-    'Done'
-FROM generate_series(0, 365) i, generate_series(1, 20) 
-ON CONFLICT (MaNV, MaCN, MaCL, Ngay) DO NOTHING;
+    'PC' || i,  
+    'NV' || (floor(random()*100)+1),
+    'CN' || (floor(random()*10)+1),
+    'CL' || LPAD((floor(random()*3)+1)::text, 3, '0'), 
+    NOW() - (random()*30 * interval '1 day'),
+    'Scheduled'
+FROM generate_series(1, 50000) i
+ON CONFLICT (MaPC) DO NOTHING; 
 
 -- BẬT LẠI TRIGGERS SAU KHI NẠP XONG
 SET session_replication_role = 'origin';
