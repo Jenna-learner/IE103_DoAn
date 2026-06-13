@@ -39,13 +39,21 @@ const HANG_FILTER = [
 ]
 
 
+// DB có thể trả hạng bằng tiếng Anh (Bronze/Silver/Gold/Platinum) hoặc tiếng Việt.
+// Chuẩn hóa hết về tiếng Việt để khớp MEMBERSHIP, bộ lọc và KPI bên dưới.
+const RANK_VI = {
+  Bronze: 'Đồng', Silver: 'Bạc', Gold: 'Vàng', Platinum: 'Kim cương',
+  'Đồng': 'Đồng', 'Bạc': 'Bạc', 'Vàng': 'Vàng', 'Kim cương': 'Kim cương',
+}
+const toVietRank = (r) => RANK_VI[r] || 'Đồng'
+
 function normalizeCustomer(item = {}) {
   return {
     MaKH: item.MaKH || item.makh,
     TenKH: item.TenKH || item.tenkh || '',
     SDT: item.SDT || item.sdt || '',
     Email: item.Email || item.email || '',
-    HangThanhVien: item.HangThanhVien || item.hangthanhvien || 'Đồng',
+    HangThanhVien: toVietRank(item.HangThanhVien || item.hangthanhvien),
     DiemTichLuy: Number(item.DiemTichLuy ?? item.diemtichluy ?? 0),
     TongDonHang: Number(item.TongDonHang ?? item.tongdonhang ?? 0),
     TongChiTieu: Number(item.TongChiTieu ?? item.tongchitieu ?? 0),
@@ -268,7 +276,7 @@ export default function KhachHang() {
               )}
             </div>
           ) : filtered.map((customer, i) => {
-            const mem = MEMBERSHIP[customer.HangThanhVien] || MEMBERSHIP.Bronze
+            const mem = MEMBERSHIP[customer.HangThanhVien] || MEMBERSHIP['Đồng']
             return (
               <div
                 key={customer.MaKH}

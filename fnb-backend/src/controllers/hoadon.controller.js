@@ -142,8 +142,18 @@ const create = async (req, res, next) => {
     const maCN = MaCN || req.user.maCN;
     const MaHD = genMa('HD');
 
-    if (!maCN) return error(res, 'Vui lòng chọn chi nhánh để tạo hóa đơn.', 400);
-    if (!canAccessBranchData(req.user, maCN)) return error(res, 'Bạn không có quyền tạo hóa đơn cho chi nhánh khác.', 403);
+    if (!maCN) {
+      await client.query('ROLLBACK');
+      return error(res, 'Vui lòng chọn chi nhánh để tạo hóa đơn.', 400);
+    }
+    if (!canAccessBranchData(req.user, maCN)) {
+      await client.query('ROLLBACK');
+      return error(res, 'Bạn không có quyền tạo hóa đơn cho chi nhánh khác.', 403);
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      await client.query('ROLLBACK');
+      return error(res, 'Hóa đơn phải có ít nhất 1 sản phẩm.', 400);
+    }
 
     let tongTienHang = 0;
     const enriched = [];

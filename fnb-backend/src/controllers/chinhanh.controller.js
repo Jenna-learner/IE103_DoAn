@@ -61,7 +61,7 @@ const updateCN = async (req, res, next) => {
              WHERE nc.MaCN = $1 AND nc.DenNgay IS NULL AND nv.TrangThai = 'Active') AS active_employees,
             (SELECT COUNT(*)
              FROM PHANCONG
-             WHERE MaCN = $1 AND Ngay >= CURRENT_DATE AND TrangThai = 'Assigned') AS future_assignments,
+             WHERE MaCN = $1 AND NgayPhanCong >= CURRENT_DATE AND TrangThai NOT IN ('Cancelled','Done')) AS future_assignments,
             (SELECT COUNT(*)
              FROM PHIEUNHAP
              WHERE MaCN = $1 AND TrangThai = 'Draft') AS pending_purchase_orders,

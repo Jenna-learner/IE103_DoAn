@@ -15,9 +15,13 @@ const baseConfig = {
   host: process.env.DB_HOST,
   port: parseInt(process.env.DB_PORT, 10),
   database: process.env.DB_NAME,
-  max: 10,
+  max: parseInt(process.env.DB_POOL_MAX, 10) || 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  connectionTimeoutMillis: parseInt(process.env.DB_CONN_TIMEOUT, 10) || 10000,
+  // Giữ kết nối sống qua ZeroTier (tránh NAT/idle drop làm "Connection terminated")
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
+  allowExitOnIdle: false,
   ssl: false,
 };
 
@@ -65,9 +69,10 @@ const createPool = (name, credentials) => {
     console.log(`✅ PostgreSQL connected via ZeroTier (${name})`);
   });
 
+  // Idle client lỗi (VPN/NAT drop) KHÔNG được làm sập server.
+  // node-pg sẽ tự loại client hỏng khỏi pool; chỉ cần log lại.
   pool.on('error', (err) => {
-    console.error(`❌ PostgreSQL Pool Error (${name}):`, err.message);
-    process.exit(1);
+    console.error(`❌ PostgreSQL idle client error (${name}):`, err.message);
   });
 
   return pool;
@@ -144,7 +149,14 @@ const queryCtx = async (req, text, params) => {
 
 const getClientCtx = async (req) => {
   const client = await getPoolByRole(req?.user?.vaiTro).connect();
-  await setRequestContext(client, req);
+  try {
+    await setRequestContext(client, req);
+  } catch (err) {
+    // Nếu set context thất bại, PHẢI trả connection về pool, nếu không sẽ rò rỉ
+    // → cạn pool → các request sau bị "Connection terminated due to connection timeout"
+    client.release();
+    throw err;
+  }
   return wrapRequestClient(client);
 };
 

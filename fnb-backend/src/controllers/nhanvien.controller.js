@@ -130,7 +130,7 @@ const update = async (req, res, next) => {
 
     if (trangThaiDb !== 'Active') {
       const { rows: related } = await req.db.query( 
-        `SELECT COUNT(*) FILTER (WHERE pc.TrangThai = 'Assigned' AND pc.Ngay >= CURRENT_DATE) AS pending_shifts
+        `SELECT COUNT(*) FILTER (WHERE pc.NgayPhanCong >= CURRENT_DATE AND pc.TrangThai NOT IN ('Cancelled','Done')) AS pending_shifts
          FROM NHANVIEN nv
          LEFT JOIN PHANCONG pc ON pc.MaNV = nv.MaNV
          WHERE nv.MaNV = $1

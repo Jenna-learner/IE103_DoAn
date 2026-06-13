@@ -12,12 +12,14 @@ import { ROLE, ROLE_LABEL, normalizeRole } from '../lib/roles'
 
 const DOW = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật']
 const STATUS_LABEL = {
+  Scheduled: 'Đã xếp lịch',
   Assigned: 'Đã phân công',
   Done: 'Hoàn tất',
   Absent: 'Vắng mặt',
   Cancelled: 'Đã huỷ',
 }
 const STATUS_CLASS = {
+  Scheduled: 'bg-amber-50 text-amber-700 border-amber-200',
   Assigned: 'bg-amber-50 text-amber-700 border-amber-200',
   Done: 'bg-green-50 text-green-700 border-green-200',
   Absent: 'bg-red-50 text-red-700 border-red-200',
