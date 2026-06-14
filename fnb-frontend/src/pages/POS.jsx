@@ -9,6 +9,7 @@ import clsx from 'clsx'
 
 import ProductCard from '../components/pos/ProductCard'
 import CartItem from '../components/pos/CartItem'
+import ReceiptPrint from '../components/pos/ReceiptPrint'
 import { fmtCurrency, membershipStyle } from '../lib/format'
 import api from '../lib/api'
 import useAuthStore from '../store/authStore'
@@ -78,6 +79,7 @@ export default function POS() {
 
   const [payMethod, setPayMethod] = useState('Cash')
   const [isCheckout, setIsCheckout] = useState(false)
+  const [receipt, setReceipt] = useState(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -211,7 +213,34 @@ export default function POS() {
         items: cart.map((i) => ({ MaSP: i.MaSP, SoLuong: i.SoLuong })),
       }
       const res = await api.post('/hoa-don', payload)
-      toast.success(`✅ Thanh toán thành công! Mã HĐ: ${res.data?.MaHD || '—'}`)
+      const maHD = res.data?.MaHD || '—'
+      toast.success(`✅ Thanh toán thành công! Mã HĐ: ${maHD}`)
+
+      // Snapshot hóa đơn để in ngay (lấy từ state hiện tại, không cần gọi lại API)
+      const branchName = canPickBranch
+        ? (branches.find((b) => b.MaCN === selectedBranch)?.TenCN || selectedBranch)
+        : (user?.tenCN || '')
+      setReceipt({
+        MaHD: maHD,
+        NgayLap: res.data?.NgayLap || new Date(),
+        TenCN: branchName,
+        TenNhanVien: user?.hoTen || '',
+        customer: customer
+          ? { TenKH: customer.TenKH, SDT: customer.SDT, HangThanhVien: customer.HangThanhVien }
+          : null,
+        items: cart.map((i) => ({
+          TenSP: i.TenSP,
+          SoLuong: i.SoLuong,
+          GiaBan: i.GiaBan,
+          ThanhTien: i.GiaBan * i.SoLuong,
+        })),
+        TongTienHang: tongTienHang,
+        GiamGia: giamGia,
+        TongThanhToan: tongThanhToan,
+        PhuongThuc: payMethod,
+        DiemCong: customer ? diemCong : 0,
+      })
+
       clearCart()
     } catch (err) {
       toast.error(err.message || 'Thanh toán thất bại.')
@@ -493,6 +522,10 @@ export default function POS() {
           </button>
         </div>
       </div>
+
+      {receipt && (
+        <ReceiptPrint order={receipt} onClose={() => setReceipt(null)} />
+      )}
     </div>
   )
 }

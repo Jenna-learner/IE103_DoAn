@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   AlertTriangle, CalendarDays, CheckCircle2, ClipboardList,
   Package, Receipt, RefreshCw, ShoppingCart, Store, TrendingUp, Truck, Users, Printer,
+  FileBarChart, ChevronDown,
 } from 'lucide-react'
 import {
   ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip,
@@ -14,7 +15,18 @@ import api from '../lib/api'
 import useAuthStore from '../store/authStore'
 import { fmtCurrency, fmtNumber } from '../lib/format'
 import PrintableReport from '../components/report/PrintableReport'
+import BusinessReport from '../components/report/BusinessReport'
 import { MANAGER_ROLES, ROLE, ROLE_LABEL, normalizeRole } from '../lib/roles'
+
+// Danh mục báo cáo nghiệp vụ (xuất PDF) — endpoint /bao-cao/*
+const BUSINESS_REPORTS = [
+  { type: 'dong-tien',      label: 'Tổng hợp dòng tiền',    endpoint: '/bao-cao/dong-tien' },
+  { type: 'khach-hang',     label: 'Khách hàng & hội viên', endpoint: '/bao-cao/khach-hang' },
+  { type: 'chi-van-hanh',   label: 'Chi phí vận hành',      endpoint: '/bao-cao/chi-van-hanh' },
+  { type: 'nhap-hang',      label: 'Nhập hàng',             endpoint: '/bao-cao/nhap-hang' },
+  { type: 'luong',          label: 'Lương nhân viên',       endpoint: '/bao-cao/bang-luong' },
+  { type: 'trang-thai-mon', label: 'Trạng thái sản phẩm',   endpoint: '/bao-cao/trang-thai-mon' },
+]
 
 function todayISO() {
   const now = new Date()
@@ -189,6 +201,10 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false)
   const [refreshingViews, setRefreshingViews] = useState(false)
   const [showReport, setShowReport] = useState(false)
+  const [businessMenuOpen, setBusinessMenuOpen] = useState(false)
+  const [businessType, setBusinessType] = useState(null)
+  const [businessData, setBusinessData] = useState(null)
+  const [loadingBusiness, setLoadingBusiness] = useState(false)
 
   const [summary, setSummary] = useState(normalizeSummary())
   const [revenueSeries, setRevenueSeries] = useState([])
@@ -319,6 +335,31 @@ export default function Dashboard() {
     }
   }
 
+  const openBusinessReport = async (type) => {
+    setBusinessMenuOpen(false)
+    const cfg = BUSINESS_REPORTS.find((r) => r.type === type)
+    if (!cfg) return
+
+    setLoadingBusiness(true)
+    try {
+      const params = {}
+      if (selectedBranch) params.maCN = selectedBranch
+      if (type === 'luong') {
+        const [yy, mm] = month.split('-')
+        params.thang = `${mm}/${yy}`          // v_BangLuongNhanVien dùng MM/YYYY
+      } else if (type !== 'trang-thai-mon') {
+        params.thang = month                   // YYYY-MM
+      }
+      const res = await api.get(cfg.endpoint, { params })
+      setBusinessData(res.data)
+      setBusinessType(type)
+    } catch (err) {
+      toast.error(err.message || 'Không tải được báo cáo')
+    } finally {
+      setLoadingBusiness(false)
+    }
+  }
+
   // Chuyển NgayLap (UTC ISO string) sang local date trước khi so sánh với todayISO()
   // Dùng cùng cách tính timezone offset như todayISO() để nhất quán
   const toLocalDate = (str) => {
@@ -403,6 +444,37 @@ export default function Dashboard() {
               <Printer size={14} />
               Xuất báo cáo PDF
             </button>
+
+            {isManagerDashboard && (
+              <div className="relative">
+                <button
+                  onClick={() => setBusinessMenuOpen((v) => !v)}
+                  className="btn-secondary text-sm px-3 py-2"
+                  disabled={loadingBusiness}
+                >
+                  <FileBarChart size={14} className={clsx(loadingBusiness && 'animate-pulse')} />
+                  {loadingBusiness ? 'Đang tải...' : 'Báo cáo nghiệp vụ'}
+                  <ChevronDown size={13} className="opacity-70" />
+                </button>
+
+                {businessMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setBusinessMenuOpen(false)} />
+                    <div className="absolute right-0 mt-1 w-60 bg-white border border-gray-200 rounded-xl shadow-lg z-20 py-1">
+                      {BUSINESS_REPORTS.map((r) => (
+                        <button
+                          key={r.type}
+                          onClick={() => openBusinessReport(r.type)}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-brand-50 hover:text-brand-700 transition-colors"
+                        >
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -691,6 +763,18 @@ export default function Dashboard() {
           stockCount={stockSnapshot.length}
           pendingPO={pendingPO}
           onClose={() => setShowReport(false)}
+        />
+      )}
+
+      {businessType && businessData && (
+        <BusinessReport
+          type={businessType}
+          data={businessData}
+          roleLabel={ROLE_LABEL[role] || role}
+          branchLabel={selectedBranchLabel}
+          period={`Tháng ${month}`}
+          preparedBy={user?.hoTen || 'Người dùng'}
+          onClose={() => { setBusinessType(null); setBusinessData(null) }}
         />
       )}
     </div>

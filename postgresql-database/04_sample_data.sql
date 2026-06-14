@@ -172,16 +172,26 @@ INSERT INTO CALAM (MaCL, TenCL, GioBatDau, GioKetThuc) VALUES
 ('CL003', 'Night Shift', '18:00', '23:59:59')
 ON CONFLICT (MaCL) DO NOTHING;
 
--- 8. Khách hàng (300) — tính hạng theo điểm để nhất quán
+-- 8. Khách hàng (300) — phân bổ ĐỀU 4 hạng (~75 KH/hạng) để báo cáo hội viên rõ ràng
+--    Điểm khớp đúng ngưỡng hạng để nhất quán (Platinum>=15000, Gold>=10000, Silver>=5000)
 INSERT INTO KHACHHANG (MaKH, HoTen, SDT, DiemTichLuy, HangThanhVien)
 SELECT 'KH' || i, 'Khách hàng ' || i, '08' || LPAD(i::text, 8, '0'),
-       d.diem,
-       CASE WHEN d.diem >= 15000 THEN 'Platinum'
-            WHEN d.diem >= 10000 THEN 'Gold'
-            WHEN d.diem >= 5000  THEN 'Silver'
-            ELSE 'Bronze' END
+       d.diem, d.hang
 FROM generate_series(1, 300) i
-CROSS JOIN LATERAL (SELECT (floor(random() * 20000))::int AS diem) d
+CROSS JOIN LATERAL (
+  SELECT CASE (i % 4)
+           WHEN 0 THEN 15000 + (i * 7 % 5000)   -- Platinum
+           WHEN 1 THEN 10000 + (i * 7 % 4999)    -- Gold
+           WHEN 2 THEN 5000  + (i * 7 % 4999)    -- Silver
+           ELSE        (i * 7 % 4999)            -- Bronze
+         END AS diem,
+         CASE (i % 4)
+           WHEN 0 THEN 'Platinum'
+           WHEN 1 THEN 'Gold'
+           WHEN 2 THEN 'Silver'
+           ELSE        'Bronze'
+         END AS hang
+) d
 ON CONFLICT (MaKH) DO UPDATE
 SET HoTen = EXCLUDED.HoTen, SDT = EXCLUDED.SDT,
     DiemTichLuy = EXCLUDED.DiemTichLuy, HangThanhVien = EXCLUDED.HangThanhVien;
@@ -297,15 +307,15 @@ FROM HOADON hd
 WHERE hd.TongThanhToan > 0
 ON CONFLICT (MaTT) DO NOTHING;
 
--- 5. Phiếu nhập (40) + chi tiết
+-- 5. Phiếu nhập (60) + chi tiết — round-robin chi nhánh để MỌI chi nhánh đều có phiếu nhập
 INSERT INTO PHIEUNHAP (MaPN, MaCN, MaNCC, MaNVLap, NgayNhap, TongTien, TrangThai)
 SELECT 'PN' || LPAD(i::text, 5, '0'),
-       'CN' || LPAD((floor(random() * 10) + 1)::text, 3, '0'),
-       'NCC' || (floor(random() * 15) + 1),
-       'NV' || LPAD((floor(random() * 40) + 1)::text, 3, '0'),
-       NOW() - (random() * 120) * interval '1 day',
+       'CN' || LPAD(((i % 10) + 1)::text, 3, '0'),
+       'NCC' || ((i % 15) + 1),
+       'NV' || LPAD(((i % 40) + 1)::text, 3, '0'),
+       NOW() - (floor(random() * 75)) * interval '1 day',
        0, 'Received'
-FROM generate_series(1, 40) i
+FROM generate_series(1, 60) i
 ON CONFLICT (MaPN) DO NOTHING;
 
 INSERT INTO CHITIET_PHIEUNHAP (MaPN, MaNL, SoLuong, DonGia)
@@ -313,7 +323,7 @@ SELECT 'PN' || LPAD(s.id::text, 5, '0'),
        'NL' || LPAD((floor(random() * 35) + 1)::text, 3, '0'),
        (floor(random() * 200) + 20)::numeric,
        (floor(random() * 40) + 10) * 1000
-FROM generate_series(1, 40) AS s(id),
+FROM generate_series(1, 60) AS s(id),
      generate_series(1, (floor(random() * 4) + 1)::int)
 ON CONFLICT (MaPN, MaNL) DO NOTHING;
 
@@ -322,19 +332,21 @@ SET TongTien = t.tong
 FROM (SELECT MaPN, SUM(SoLuong * DonGia) AS tong FROM CHITIET_PHIEUNHAP GROUP BY MaPN) t
 WHERE pn.MaPN = t.MaPN;
 
--- 6. Phiếu chi (120) cho phần tài chính/chi phí
+-- 6. Phiếu chi (400) cho phần tài chính/chi phí
+--    Round-robin chi nhánh & loại chi -> đủ 10 chi nhánh + đủ 8 loại; ~80% Approved
+--    Ngày trong 75 ngày gần nhất -> tháng hiện tại có đủ dữ liệu để báo cáo
 INSERT INTO PHIEUCHI (MaPC, MaCN, MaNV, NgayChi, LoaiChi, SoTien, MoTa, TrangThai)
 SELECT 'PC' || LPAD(i::text, 5, '0'),
-       'CN' || LPAD((floor(random() * 10) + 1)::text, 3, '0'),
-       'NV' || LPAD((floor(random() * 40) + 1)::text, 3, '0'),
-       NOW() - (random() * 90) * interval '1 day',
+       'CN' || LPAD(((i % 10) + 1)::text, 3, '0'),
+       'NV' || LPAD(((i % 40) + 1)::text, 3, '0'),
+       NOW() - (floor(random() * 75)) * interval '1 day',
        (ARRAY['Electricity','Water','Internet','Premises',
               'Maintenance & Repair','Marketing & Advertising',
-              'Taxes & Fees','Other expenses'])[floor(random() * 8) + 1],
+              'Taxes & Fees','Other expenses'])[(i % 8) + 1],
        (floor(random() * 9) + 1) * 500000,
        'Chi phí vận hành demo ' || i,
-       (ARRAY['Approved','Approved','Approved','Pending'])[floor(random() * 4) + 1]
-FROM generate_series(1, 120) i
+       CASE WHEN i % 5 = 0 THEN 'Pending' ELSE 'Approved' END
+FROM generate_series(1, 400) i
 ON CONFLICT (MaPC) DO NOTHING;
 
 -- 7. Nhật ký kho (1.500 dòng, MÃ ĐÚNG)
@@ -347,6 +359,27 @@ SELECT 'CN' || LPAD((floor(random() * 10) + 1)::text, 3, '0'),
        'NV' || LPAD((floor(random() * 40) + 1)::text, 3, '0'),
        NOW() - (random() * 90) * interval '1 day'
 FROM generate_series(1, 1500) i;
+
+-- 7b. Điều chỉnh kiểm kho & Hao hụt/hư hỏng (200 dòng) — dành riêng cho báo cáo nhập hàng
+--     Số liệu trước/sau hợp lệ (sau = trước - lượng, không âm), đủ 10 chi nhánh,
+--     60 ngày gần nhất, kèm ghi chú để báo cáo dễ đọc.
+INSERT INTO NHATKYKHO (MaCN, MaNL, LoaiBienDong, SoLuong, SoLuongTruoc, SoLuongSau, NguonPhatSinh, MaNVThucHien, GhiChu, NgayGhi)
+SELECT 'CN' || LPAD(((i % 10) + 1)::text, 3, '0'),
+       'NL' || LPAD(((i % 35) + 1)::text, 3, '0'),
+       CASE WHEN i % 2 = 0 THEN 'Adjustment' ELSE 'Wastage' END,
+       sl.qty,
+       sl.truoc,
+       GREATEST(sl.truoc - sl.qty, 0),
+       'KIEMKHO',
+       'NV' || LPAD(((i % 40) + 1)::text, 3, '0'),
+       CASE WHEN i % 2 = 0 THEN 'Điều chỉnh sau kiểm kho định kỳ'
+            ELSE 'Hao hụt/hư hỏng trong bảo quản' END,
+       NOW() - (floor(random() * 60)) * interval '1 day'
+FROM generate_series(1, 200) i
+CROSS JOIN LATERAL (
+  SELECT (floor(random() * 70) + 10)::numeric  AS qty,
+         (floor(random() * 500) + 300)::numeric AS truoc
+) sl;
 
 -- 8. Phân công ca (300 dòng, 30 ngày gần nhất, MÃ ĐÚNG)
 INSERT INTO PHANCONG (MaPC, MaNV, MaCN, MaCL, NgayPhanCong, TrangThai)
@@ -365,6 +398,21 @@ FROM (
   ) u
   LIMIT 300
 ) g
+ON CONFLICT (MaPC) DO NOTHING;
+
+-- 8b. Phân công ca ĐÃ LÀM ('Done') cho NV001–NV040 — để dashboard/báo cáo LƯƠNG có số.
+--     Mỗi nhân viên gắn 1 chi nhánh cố định (round-robin đủ 10 CN) + 15 ca 'Done',
+--     ngày rải ~28 ngày gần nhất -> tháng hiện tại có dữ liệu lương ở mọi chi nhánh.
+--     Mã PCD... riêng biệt nên không đụng block 8 ở trên.
+INSERT INTO PHANCONG (MaPC, MaNV, MaCN, MaCL, NgayPhanCong, TrangThai)
+SELECT 'PCD' || LPAD(((e - 1) * 15 + k)::text, 6, '0'),
+       'NV' || LPAD(e::text, 3, '0'),
+       'CN' || LPAD(((e % 10) + 1)::text, 3, '0'),
+       'CL' || LPAD(((k % 3) + 1)::text, 3, '0'),
+       CURRENT_DATE - ((k - 1) * 2),
+       'Done'
+FROM generate_series(1, 40) e
+CROSS JOIN generate_series(1, 15) k
 ON CONFLICT (MaPC) DO NOTHING;
 
 -- ============================================================

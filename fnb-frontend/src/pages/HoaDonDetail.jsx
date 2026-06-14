@@ -20,6 +20,7 @@ import api from '../lib/api'
 import { fmtCurrency, membershipStyle } from '../lib/format'
 import { useAuthStore } from '../store/authStore'
 import { ROLE } from '../lib/roles'
+import ReceiptPrint from '../components/pos/ReceiptPrint'
 
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
 const STATUS_STYLE = {
@@ -60,6 +61,7 @@ export default function HoaDonDetail() {
   const [order,   setOrder]   = useState(null)
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState(false)
+  const [showReceipt, setShowReceipt] = useState(false)
 
   const canCancel = [ROLE.ADMIN, ROLE.BRANCH_MANAGER].includes(user?.vaiTro)
 
@@ -121,7 +123,7 @@ export default function HoaDonDetail() {
         </button>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => window.print()}
+            onClick={() => setShowReceipt(true)}
             className="btn-secondary flex items-center gap-1.5 text-sm px-3 py-1.5"
           >
             <Printer size={14} />
@@ -263,6 +265,32 @@ export default function HoaDonDetail() {
           <span className="font-bold text-xl text-brand-600">{fmtCurrency(order.TongThanhToan)}</span>
         </div>
       </div>
+
+      {showReceipt && (
+        <ReceiptPrint
+          order={{
+            MaHD: order.MaHD,
+            NgayLap: order.NgayLap,
+            TenCN: order.TenCN,
+            TenNhanVien: order.TenNhanVien,
+            customer: order.TenKH
+              ? { TenKH: order.TenKH, SDT: order.SDTKH, HangThanhVien: order.HangThanhVien }
+              : null,
+            items: (order.chiTiet || []).map((it) => ({
+              TenSP: it.TenSP,
+              SoLuong: it.SoLuong,
+              GiaBan: it.DonGia,
+              ThanhTien: it.ThanhTien,
+            })),
+            TongTienHang: order.TongTienHang,
+            GiamGia: order.GiamGia,
+            TongThanhToan: order.TongThanhToan,
+            PhuongThuc: order.thanhToan?.PhuongThuc,
+            DiemCong: 0,
+          }}
+          onClose={() => setShowReceipt(false)}
+        />
+      )}
 
     </div>
   )

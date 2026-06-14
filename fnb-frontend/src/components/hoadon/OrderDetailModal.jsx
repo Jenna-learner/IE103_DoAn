@@ -3,9 +3,11 @@
  * Hiển thị: header đơn hàng, danh sách sản phẩm, tóm tắt thanh toán
  * Props: order (object), onClose (fn), onCancel (fn, chỉ cho quản lý)
  */
+import { useState } from 'react'
 import { X, User, Store, CreditCard, Clock, Hash, Printer } from 'lucide-react'
 import { fmtCurrency, membershipStyle, orderStatusStyle } from '../../lib/format'
 import clsx from 'clsx'
+import ReceiptPrint from '../pos/ReceiptPrint'
 
 const PAY_ICON = { Cash: '💵', Card: '💳', 'E-Wallet': '📱', EWallet: '📱', BankTransfer: '🏦' }
 const PAY_LABEL = { Cash: 'Tiền mặt', Card: 'Thẻ ngân hàng', 'E-Wallet': 'Ví điện tử', EWallet: 'Ví điện tử', BankTransfer: 'Chuyển khoản' }
@@ -25,6 +27,7 @@ const StatusBadge = ({ status }) => {
 }
 
 export default function OrderDetailModal({ order, onClose, onCancel, canCancel }) {
+  const [showReceipt, setShowReceipt] = useState(false)
   if (!order) return null
 
   const fmtDate = (iso) => {
@@ -166,7 +169,7 @@ export default function OrderDetailModal({ order, onClose, onCancel, canCancel }
         {/* ── Footer actions ── */}
         <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-3">
           <button
-            onClick={onClose}
+            onClick={() => setShowReceipt(true)}
             className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
           >
             <Printer size={14} />
@@ -191,6 +194,32 @@ export default function OrderDetailModal({ order, onClose, onCancel, canCancel }
         </div>
 
       </div>
+
+      {showReceipt && (
+        <ReceiptPrint
+          order={{
+            MaHD: order.MaHD,
+            NgayLap: order.NgayLap,
+            TenCN: order.TenCN,
+            TenNhanVien: order.TenNhanVien,
+            customer: order.TenKH
+              ? { TenKH: order.TenKH, SDT: order.SDTKH, HangThanhVien: order.HangThanhVien }
+              : null,
+            items: (order.chiTiet || []).map((it) => ({
+              TenSP: it.TenSP,
+              SoLuong: it.SoLuong,
+              GiaBan: it.DonGia,
+              ThanhTien: it.ThanhTien,
+            })),
+            TongTienHang: order.TongTienHang,
+            GiamGia: order.GiamGia,
+            TongThanhToan: order.TongThanhToan,
+            PhuongThuc: order.thanhToan?.PhuongThuc,
+            DiemCong: 0,
+          }}
+          onClose={() => setShowReceipt(false)}
+        />
+      )}
     </div>
   )
 }

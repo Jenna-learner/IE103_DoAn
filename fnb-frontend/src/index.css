@@ -106,9 +106,61 @@
 .report-footer { display: flex; justify-content: space-between; font-size: 9px; color: #94a3b8;
   border-top: 1px solid #e5e7eb; padding-top: 6px; margin-top: 24px; }
 
+/* ============================================================
+   HÓA ĐƠN BÁN HÀNG (Receipt) — phiếu in nhiệt 80mm
+   ============================================================ */
+.receipt-overlay {
+  position: fixed; inset: 0; z-index: 110;
+  background: rgba(15, 23, 42, .45); overflow: auto;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 0 0 40px;
+}
+.receipt-toolbar {
+  position: sticky; top: 0; z-index: 2; width: 100%;
+  display: flex; justify-content: center; gap: 10px;
+  padding: 10px; background: rgba(255,255,255,.95);
+  border-bottom: 1px solid #e5e7eb; margin-bottom: 20px;
+}
+.receipt-btn-print, .receipt-btn-close {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; padding: 8px 16px;
+  border-radius: 8px; cursor: pointer; border: 1px solid transparent;
+}
+.receipt-btn-print { background: #f97316; color: #fff; }
+.receipt-btn-print:hover { background: #ea580c; }
+.receipt-btn-close { background: #fff; color: #475569; border-color: #e5e7eb; }
+.receipt-btn-close:hover { background: #f8fafc; }
+
+.receipt-paper {
+  width: 80mm; max-width: 92vw; background: #fff;
+  padding: 14px 12px 18px; box-shadow: 0 6px 28px rgba(0,0,0,.18);
+  color: #111827; font-family: 'Courier New', ui-monospace, monospace;
+  font-size: 12px; line-height: 1.45;
+}
+.receipt-center { text-align: center; }
+.receipt-shop { font-size: 16px; font-weight: 800; letter-spacing: 1px; }
+.receipt-branch { font-size: 11px; color: #374151; margin-top: 1px; }
+.receipt-title { font-size: 12px; font-weight: 700; margin-top: 6px; }
+.receipt-divider { border-top: 1px dashed #9ca3af; margin: 8px 0; }
+.receipt-meta div { display: flex; justify-content: space-between; gap: 8px; }
+.receipt-meta span:first-child { color: #6b7280; }
+.receipt-items { width: 100%; border-collapse: collapse; }
+.receipt-items th { font-size: 11px; color: #6b7280; text-align: left; padding-bottom: 2px; }
+.receipt-items td { vertical-align: top; padding: 2px 0; }
+.receipt-items .ri-qty { text-align: center; white-space: nowrap; width: 28px; }
+.receipt-items .ri-amt { text-align: right; white-space: nowrap; }
+.receipt-items .ri-name { padding-right: 6px; }
+.receipt-items .ri-unit { font-size: 10px; color: #9ca3af; }
+.receipt-sum div { display: flex; justify-content: space-between; gap: 8px; }
+.receipt-sum span:first-child { color: #6b7280; }
+.receipt-total { font-weight: 800; font-size: 13px; margin: 4px 0; }
+.receipt-total span { color: #111827 !important; }
+.receipt-thanks { margin-top: 6px; font-size: 11px; color: #374151; }
+
 @media print {
   body * { visibility: hidden !important; }
-  .report-overlay, .report-overlay * { visibility: visible !important; }
+  .report-overlay, .report-overlay *,
+  .receipt-overlay, .receipt-overlay * { visibility: visible !important; }
   .report-overlay { position: absolute; inset: 0; background: #fff; padding: 0; overflow: visible; }
   .no-print { display: none !important; }
   .report-root { width: auto; margin: 0; box-shadow: none; padding: 0; }
@@ -117,4 +169,8 @@
   .report-footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 4px 8mm; background: #fff; }
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   @page { size: A4; margin: 12mm 8mm 16mm; }
+
+  /* Hóa đơn: in gọn ở góc trên, không nền tối, không bóng */
+  .receipt-overlay { position: absolute; inset: 0; background: #fff; padding: 0; display: block; }
+  .receipt-paper { width: 80mm; max-width: none; box-shadow: none; padding: 0; margin: 0; }
 }
