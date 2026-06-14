@@ -52,3 +52,69 @@
   .badge-gray   { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600; }
   .badge-blue   { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700; }
 }
+
+/* ============================================================
+   BÁO CÁO IN (Printable report) — Print → Save as PDF
+   ============================================================ */
+.report-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: #f1f5f9; overflow: auto; padding: 0 0 60px;
+}
+.report-toolbar {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; justify-content: center; gap: 10px;
+  padding: 10px; background: rgba(255,255,255,.92);
+  border-bottom: 1px solid #e5e7eb; margin-bottom: 18px;
+}
+.report-root {
+  width: 794px; margin: 0 auto; background: #fff;
+  padding: 28px 32px 64px; box-shadow: 0 4px 24px rgba(0,0,0,.08);
+  color: #0f172a; font-size: 12px; position: relative;
+}
+.report-header { display: flex; justify-content: space-between; align-items: flex-start;
+  border-bottom: 2px solid #f97316; padding-bottom: 12px; }
+.report-brand { display: flex; gap: 10px; align-items: center; }
+.report-brand img { width: 42px; height: 42px; border-radius: 10px; object-fit: cover; }
+.report-company { font-weight: 700; font-size: 14px; }
+.report-company-sub { font-size: 10px; color: #64748b; }
+.report-title-block { text-align: right; }
+.report-title-block h1 { font-size: 18px; font-weight: 800; letter-spacing: .5px; }
+.report-title-block p { font-size: 11px; color: #475569; margin-top: 2px; }
+.report-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; margin: 14px 0 6px; font-size: 11px; }
+.report-meta span { color: #64748b; }
+.report-section { margin-top: 16px; break-inside: avoid; }
+.report-section-head { display: flex; justify-content: space-between; align-items: baseline;
+  border-left: 3px solid #f97316; padding-left: 8px; margin-bottom: 8px; }
+.report-section-head h2 { font-size: 13px; font-weight: 700; }
+.report-section-head span { font-size: 10px; color: #94a3b8; }
+.report-kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.report-kpi { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; background: #f8fafc; }
+.report-kpi-label { font-size: 10px; color: #64748b; }
+.report-kpi-value { font-size: 14px; font-weight: 700; margin-top: 2px; }
+.report-chart { display: flex; justify-content: center; }
+.report-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.report-table th, .report-table td { border: 1px solid #e5e7eb; padding: 5px 7px; text-align: left; }
+.report-table th { background: #f1f5f9; font-weight: 600; }
+.report-table td.num, .report-table th.num { text-align: right; }
+.report-empty { text-align: center; color: #94a3b8; font-style: italic; padding: 8px; }
+.report-sign { display: flex; justify-content: flex-end; margin-top: 28px; break-inside: avoid; }
+.report-sign > div { text-align: center; width: 240px; }
+.report-sign-place { font-size: 11px; font-style: italic; }
+.report-sign-role { font-weight: 700; font-size: 12px; margin-top: 4px; }
+.report-sign-note { font-size: 10px; color: #64748b; }
+.report-sign-name { margin-top: 42px; font-weight: 600; }
+.report-footer { display: flex; justify-content: space-between; font-size: 9px; color: #94a3b8;
+  border-top: 1px solid #e5e7eb; padding-top: 6px; margin-top: 24px; }
+
+@media print {
+  body * { visibility: hidden !important; }
+  .report-overlay, .report-overlay * { visibility: visible !important; }
+  .report-overlay { position: absolute; inset: 0; background: #fff; padding: 0; overflow: visible; }
+  .no-print { display: none !important; }
+  .report-root { width: auto; margin: 0; box-shadow: none; padding: 0; }
+  .report-section, .report-sign { break-inside: avoid; }
+  .report-table tr, .report-kpi { break-inside: avoid; }
+  .report-footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 4px 8mm; background: #fff; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  @page { size: A4; margin: 12mm 8mm 16mm; }
+}

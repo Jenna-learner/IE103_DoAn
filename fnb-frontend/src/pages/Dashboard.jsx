@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AlertTriangle, CalendarDays, CheckCircle2, ClipboardList,
-  Package, Receipt, RefreshCw, ShoppingCart, Store, TrendingUp, Truck, Users,
+  Package, Receipt, RefreshCw, ShoppingCart, Store, TrendingUp, Truck, Users, Printer,
 } from 'lucide-react'
 import {
   ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip,
@@ -13,7 +13,7 @@ import clsx from 'clsx'
 import api from '../lib/api'
 import useAuthStore from '../store/authStore'
 import { fmtCurrency, fmtNumber } from '../lib/format'
-import { exportExcel } from '../lib/exportExcel'
+import PrintableReport from '../components/report/PrintableReport'
 import { MANAGER_ROLES, ROLE, ROLE_LABEL, normalizeRole } from '../lib/roles'
 
 function todayISO() {
@@ -188,6 +188,7 @@ export default function Dashboard() {
   const [branches, setBranches] = useState([])
   const [loading, setLoading] = useState(false)
   const [refreshingViews, setRefreshingViews] = useState(false)
+  const [showReport, setShowReport] = useState(false)
 
   const [summary, setSummary] = useState(normalizeSummary())
   const [revenueSeries, setRevenueSeries] = useState([])
@@ -394,6 +395,14 @@ export default function Dashboard() {
               <RefreshCw size={14} className={clsx((loading || refreshingViews) && 'animate-spin')} />
               {refreshingViews ? 'Đang làm mới dữ liệu báo cáo...' : 'Làm mới'}
             </button>
+            <button
+              onClick={() => setShowReport(true)}
+              className="btn-primary text-sm px-3 py-2"
+              disabled={loading}
+            >
+              <Printer size={14} />
+              Xuất báo cáo PDF
+            </button>
           </div>
         </div>
 
@@ -425,16 +434,6 @@ export default function Dashboard() {
                       <p>Doanh thu thuần</p>
                       <p className="font-semibold text-gray-700">{fmtCurrency(revenueSeries.reduce((sum, item) => sum + item.DoanhThuThuan, 0))}</p>
                     </div>
-                    <button
-                      onClick={() => exportExcel(`doanh-thu-${month}`, 'Doanh thu theo ngày', [
-                        { label: 'Ngày', value: 'Ngay' },
-                        { label: 'Doanh thu thuần', value: (row) => row.DoanhThuThuan },
-                      ], revenueSeries)}
-                      className="btn-secondary px-3 py-2 text-xs"
-                      disabled={revenueSeries.length === 0}
-                    >
-                      Xuất báo cáo
-                    </button>
                   </div>
                 </div>
 
@@ -472,18 +471,6 @@ export default function Dashboard() {
                     <h2 className="text-sm font-semibold text-gray-700">Top sản phẩm bán chạy</h2>
                     <p className="text-xs text-gray-400 mt-1">Top 5 theo số lượng bán trong phạm vi đang chọn</p>
                   </div>
-                  <button
-                    onClick={() => exportExcel(`top-san-pham-${month}`, 'Top sản phẩm', [
-                      { label: 'Mã sản phẩm', value: 'MaSP' },
-                      { label: 'Tên sản phẩm', value: 'TenSP' },
-                      { label: 'Số lượng bán', value: 'TongSoLuongBan' },
-                      { label: 'Doanh thu', value: 'TongDoanhThu' },
-                    ], topProducts)}
-                    className="btn-secondary px-3 py-2 text-xs"
-                    disabled={topProducts.length === 0}
-                  >
-                    Xuất báo cáo
-                  </button>
                 </div>
 
                 {topProducts.length === 0 ? (
@@ -656,20 +643,6 @@ export default function Dashboard() {
                     <CheckCircle2 size={14} /> Không có cảnh báo tồn kho
                   </div>
                 )}
-                <button
-                  onClick={() => exportExcel(`canh-bao-ton-kho-${month}`, 'Cảnh báo tồn kho', [
-                    { label: 'Mã nguyên liệu', value: 'MaNL' },
-                    { label: 'Tên nguyên liệu', value: 'TenNL' },
-                    { label: 'Chi nhánh', value: 'TenCN' },
-                    { label: 'Đơn vị tính', value: 'DonViTinh' },
-                    { label: 'Tồn hiện tại', value: 'SoLuongTon' },
-                    { label: 'Mức tối thiểu', value: 'TonToiThieu' },
-                  ], lowStockItems)}
-                  className="btn-secondary px-3 py-2 text-xs"
-                  disabled={lowStockItems.length === 0}
-                >
-                  Xuất báo cáo
-                </button>
               </div>
             </div>
 
@@ -701,6 +674,25 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {showReport && (
+        <PrintableReport
+          role={isManagerDashboard ? 'manager' : role === ROLE.CASHIER ? 'cashier' : 'warehouse'}
+          roleLabel={ROLE_LABEL[role] || role}
+          branchLabel={selectedBranchLabel}
+          period={isManagerDashboard ? `Tháng ${month}` : `Ngày ${todayISO()}`}
+          preparedBy={user?.hoTen || 'Người dùng'}
+          summary={summary}
+          revenueSeries={revenueSeries}
+          topProducts={topProducts}
+          lowStockItems={lowStockItems}
+          orders={role === ROLE.CASHIER ? todayOrders : orders}
+          inventoryLogs={inventoryLogs}
+          stockCount={stockSnapshot.length}
+          pendingPO={pendingPO}
+          onClose={() => setShowReport(false)}
+        />
+      )}
     </div>
   )
 }

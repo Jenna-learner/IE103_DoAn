@@ -132,9 +132,10 @@ BEGIN
     END IF;
 
     FOR r_item IN
-        SELECT cd.MaSP, cd.SoLuong, ct.MaNL, ct.DinhMuc
+        SELECT cd.MaSP, cd.SoLuong, ct.MaNL, ct.DinhMuc, nl.TenNL
         FROM   CHITIET_HOADON cd
         JOIN   CONGTHUC ct ON ct.MaSP = cd.MaSP
+        JOIN   NGUYENLIEU nl ON nl.MaNL = ct.MaNL
         WHERE  cd.MaHD = NEW.MaHD
     LOOP
         v_can_xuat := r_item.SoLuong * r_item.DinhMuc;
@@ -145,8 +146,8 @@ BEGIN
         FOR UPDATE;
 
         IF v_ton_hien IS NULL OR v_ton_hien < v_can_xuat THEN
-            RAISE EXCEPTION 'Không đủ tồn kho nguyên liệu % tại chi nhánh %. Cần: %, Có: %',
-                r_item.MaNL, NEW.MaCN, v_can_xuat, COALESCE(v_ton_hien, 0);
+            RAISE EXCEPTION 'Không đủ tồn kho nguyên liệu "%" tại chi nhánh %. Cần: %, Có: %',
+                r_item.TenNL, NEW.MaCN, v_can_xuat, COALESCE(v_ton_hien, 0);
         END IF;
 
         v_ton_sau := v_ton_hien - v_can_xuat;

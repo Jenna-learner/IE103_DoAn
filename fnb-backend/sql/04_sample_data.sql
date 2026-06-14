@@ -1,33 +1,54 @@
 -- ============================================================
--- SCRIPT NẠP DỮ LIỆU SEEDING SỐ LƯỢNG LỚN (1 TRIỆU DÒNG)
+-- HỆ THỐNG QUẢN LÝ CHUỖI FnB - IE103
+-- File: 04_sample_data.sql  (BẢN GỌN, MÃ ĐÚNG ĐỊNH DẠNG)
+-- Mục đích: Dữ liệu mẫu vừa đủ để DEMO toàn bộ tính năng đã build
+--           (POS, Kho/Nhập hàng, Chi phí, Phân công, CRM, Dashboard/Báo cáo).
+-- Khác bản 1-triệu-dòng cũ: tất cả mã giao dịch dùng LPAD đúng chuẩn
+--   (CN001, NV001, NL001, SP001...) nên các JOIN / Materialized View
+--   chạy đúng -> tồn kho & dashboard có dữ liệu.
+-- Chạy SAU 01/02/03, bằng superuser. Sau file này chạy 05 và 06.
 -- ============================================================
 
--- Bỏ qua đồng bộ dữ liệu ổ đĩa tạm thời để nạp dữ liệu nhanh hơn
-SET synchronous_commit = OFF; 
-
--- TẠM THỜI VÔ HIỆU HÓA TRIGGERS/FKS ĐỂ BULK INSERT SIÊU TỐC
-SET session_replication_role = 'replica';
+SET synchronous_commit = OFF;
+SET session_replication_role = 'replica';   -- tắt trigger/FK để nạp nhanh
 
 -- ============================================================
--- TẦNG 0: CHI NHÁNH (Bắt buộc phải có để gán dữ liệu)
+-- TẦNG 0: DANH MỤC GỐC
 -- ============================================================
--- ĐOẠN CODE ĐÃ ĐƯỢC CHUẨN HÓA ĐỒNG BỘ:
+
+-- 0. Chi nhánh (10)
 INSERT INTO CHINHANH (MaCN, TenCN, DiaChi, SDT, Email, TrangThai)
-SELECT 
-    'CN' || LPAD(i::text, 3, '0'), 
-    'Chi Nhánh ' || i, 
-    'Địa chỉ CN ' || i, 
-    '090' || LPAD(i::text, 7, '0'), 
-    'cn'||i||'@fnb.vn', 
-    'Active'
-FROM generate_series(1, 10) i 
-ON CONFLICT DO NOTHING;
+SELECT 'CN' || LPAD(i::text, 3, '0'),
+       'Chi nhánh ' || i,
+       'Địa chỉ CN ' || i,
+       '090' || LPAD(i::text, 7, '0'),
+       'cn' || i || '@fnb.vn',
+       'Active'
+FROM generate_series(1, 10) i
+ON CONFLICT (MaCN) DO NOTHING;
 
--- ============================================================
--- TẦNG 1 & 2: DANH MỤC CƠ BẢN
--- ============================================================
+-- 1. Bộ phận
+INSERT INTO BOPHAN (MaBP, TenBP) VALUES
+('BP001', 'Management'),
+('BP002', 'Kitchen/Bar'),
+('BP003', 'Service'),
+('BP004', 'Security'),
+('BP005', 'Janitor')
+ON CONFLICT (MaBP) DO NOTHING;
 
--- 1. Loại sản phẩm
+-- 2. Nhân viên (40)
+INSERT INTO NHANVIEN (MaNV, HoTen, NgaySinh, SDT, DonGiaCa, TrangThai, MaBP)
+SELECT 'NV' || LPAD(i::text, 3, '0'),
+       'Nhân viên ' || i,
+       DATE '1995-01-01' + (i * 17 % 3000) * interval '1 day',
+       '03' || LPAD(i::text, 8, '0'),
+       (floor(random() * 15 + 15)) * 10000,
+       'Active',
+       'BP' || LPAD((floor(random() * 5) + 1)::text, 3, '0')
+FROM generate_series(1, 40) i
+ON CONFLICT (MaNV) DO NOTHING;
+
+-- 3. Loại sản phẩm
 INSERT INTO LOAISANPHAM (MaLoai, TenLoai, MoTa) VALUES
 ('L01', 'Cà phê máy', 'Espresso based coffee'),
 ('L02', 'Cà phê truyền thống', 'Phin, bạc xỉu, cà phê sữa'),
@@ -37,11 +58,9 @@ INSERT INTO LOAISANPHAM (MaLoai, TenLoai, MoTa) VALUES
 ('L06', 'Nước ép & soda', 'Juice, soda, sparkling'),
 ('L07', 'Bánh ngọt', 'Pastry & dessert'),
 ('L08', 'Bữa sáng nhẹ', 'Toast, sandwich, croissant')
-ON CONFLICT (MaLoai) DO UPDATE
-SET TenLoai = EXCLUDED.TenLoai,
-    MoTa = EXCLUDED.MoTa;
+ON CONFLICT (MaLoai) DO UPDATE SET TenLoai = EXCLUDED.TenLoai, MoTa = EXCLUDED.MoTa;
 
--- 2. Sản phẩm
+-- 4. Sản phẩm (40) — giữ nguyên để khớp công thức ở 06
 WITH product_seed(name, price, maloai) AS (
     SELECT * FROM (VALUES
         ('Espresso', 39000, 'L01'),
@@ -87,20 +106,13 @@ WITH product_seed(name, price, maloai) AS (
     ) AS v(name, price, maloai)
 )
 INSERT INTO SANPHAM (MaSP, TenSP, GiaBanMacDinh, TrangThai, MaLoai)
-SELECT
-    'SP' || LPAD(row_number() OVER (), 3, '0'),
-    name,
-    price,
-    'Available',
-    maloai
+SELECT 'SP' || LPAD(row_number() OVER ()::text, 3, '0'), name, price, 'Available', maloai
 FROM product_seed
 ON CONFLICT (MaSP) DO UPDATE
-SET TenSP = EXCLUDED.TenSP,
-    GiaBanMacDinh = EXCLUDED.GiaBanMacDinh,
-    TrangThai = EXCLUDED.TrangThai,
-    MaLoai = EXCLUDED.MaLoai;
+SET TenSP = EXCLUDED.TenSP, GiaBanMacDinh = EXCLUDED.GiaBanMacDinh,
+    TrangThai = EXCLUDED.TrangThai, MaLoai = EXCLUDED.MaLoai;
 
--- 3. Nguyên liệu
+-- 5. Nguyên liệu (35) — giữ nguyên để khớp công thức ở 06
 WITH ingredient_seed(name, unit) AS (
     SELECT * FROM (VALUES
         ('Hạt cà phê Arabica', 'gram'),
@@ -141,170 +153,173 @@ WITH ingredient_seed(name, unit) AS (
     ) AS v(name, unit)
 )
 INSERT INTO NGUYENLIEU (MaNL, TenNL, DonViTinh, TrangThai)
-SELECT
-    'NL' || LPAD(row_number() OVER (), 3, '0'),
-    name,
-    unit,
-    'Active'
+SELECT 'NL' || LPAD(row_number() OVER ()::text, 3, '0'), name, unit, 'Active'
 FROM ingredient_seed
 ON CONFLICT (MaNL) DO UPDATE
-SET TenNL = EXCLUDED.TenNL,
-    DonViTinh = EXCLUDED.DonViTinh,
-    TrangThai = EXCLUDED.TrangThai;
+SET TenNL = EXCLUDED.TenNL, DonViTinh = EXCLUDED.DonViTinh, TrangThai = EXCLUDED.TrangThai;
 
--- 4. Tồn kho Chi nhánh (Tách ra từ Nguyên liệu)
-INSERT INTO TONKHO_CHINHANH (MaCN, MaNL, SoLuongTon, TonToiThieu, GiaNhapGanNhat)
-SELECT 
-    'CN'||cn, 'NL'||nl, 
-    floor(random()*5000 + 100), 500, (floor(random()*50 + 10)) * 1000
-FROM generate_series(1, 10) cn, generate_series(1, 35) nl 
-ON CONFLICT DO NOTHING;
-
--- 5. Bộ phận
-INSERT INTO BOPHAN (MaBP, TenBP) VALUES 
-('BP001', 'Management'), 
-('BP002', 'Kitchen/Bar'), 
-('BP003', 'Service'), 
-('BP004', 'Security'), 
-('BP005', 'Janitor') 
-ON CONFLICT (MaBP) DO NOTHING;
-
--- 6. Nhân viên
-INSERT INTO NHANVIEN (MaNV, HoTen, NgaySinh, SDT, DonGiaCa, TrangThai, MaBP)
-SELECT 
-    'NV' || LPAD(i::text, 3, '0'), 
-    'Nhân viên '||i, 
-    '1990-01-01'::date + (random()*5000)::int * interval '1 day',
-    '03'||LPAD(i::text, 8, '0'), (floor(random()*15 + 15)) * 10000, 
-    'Active', 'BP'||LPAD((floor(random()*5)+1)::text, 3, '0') 
-FROM generate_series(1, 500) i 
-ON CONFLICT (MaNV) DO NOTHING;
-
--- 7. Khách hàng
-WITH khachhang_seed AS (
-    SELECT 
-        'KH' || i AS MaKH,
-        'Khách hàng ' || i AS HoTen,
-        '08' || LPAD(i::text, 8, '0') AS SDT,
-        FLOOR(RANDOM() * 25000)::INT AS DiemTichLuy -- Sinh ngẫu nhiên điểm từ 0 đến 25,000
-    FROM generate_series(1, 5000) i
-)
-INSERT INTO KHACHHANG (MaKH, HoTen, SDT, DiemTichLuy, HangThanhVien)
-SELECT 
-    MaKH,
-    HoTen,
-    SDT,
-    DiemTichLuy,
-    -- Ép logic phân hạng dựa theo số điểm vừa được sinh ra ở trên
-    CASE 
-        WHEN DiemTichLuy >= 15000 THEN 'Platinum'
-        WHEN DiemTichLuy >= 10000 THEN 'Gold'
-        WHEN DiemTichLuy >= 5000 THEN 'Silver'
-        ELSE 'Bronze'
-    END AS HangThanhVien
-FROM khachhang_seed
-ON CONFLICT (MaKH) DO UPDATE 
-SET HoTen = EXCLUDED.HoTen,
-    SDT = EXCLUDED.SDT,
-    DiemTichLuy = EXCLUDED.DiemTichLuy,
-    HangThanhVien = EXCLUDED.HangThanhVien;
-
--- 8. Nhà cung cấp
+-- 6. Nhà cung cấp (15)
 INSERT INTO NHACUNGCAP (MaNCC, TenNCC, SDT, DiaChi, Email)
-SELECT 
-    'NCC'||i, 'Công ty '||i, '028'||LPAD(i::text, 7, '0'), 
-    'Địa chỉ '||i, 'ncc'||i||'@gmail.com'
-FROM generate_series(1, 100) i 
-ON CONFLICT DO NOTHING;
+SELECT 'NCC' || i, 'Công ty ' || i, '028' || LPAD(i::text, 7, '0'),
+       'Địa chỉ NCC ' || i, 'ncc' || i || '@gmail.com'
+FROM generate_series(1, 15) i
+ON CONFLICT (MaNCC) DO NOTHING;
 
--- 9. Ca làm
-INSERT INTO CALAM (MaCL, TenCL, GioBatDau, GioKetThuc) VALUES 
-('CL001', 'Morning Shift', '06:00', '12:00'), 
-('CL002', 'Afternoon Shift', '12:00', '18:00'), 
+-- 7. Ca làm
+INSERT INTO CALAM (MaCL, TenCL, GioBatDau, GioKetThuc) VALUES
+('CL001', 'Morning Shift', '06:00', '12:00'),
+('CL002', 'Afternoon Shift', '12:00', '18:00'),
 ('CL003', 'Night Shift', '18:00', '23:59:59')
-ON CONFLICT (MaCL) DO NOTHING; 
+ON CONFLICT (MaCL) DO NOTHING;
+
+-- 8. Khách hàng (300) — tính hạng theo điểm để nhất quán
+INSERT INTO KHACHHANG (MaKH, HoTen, SDT, DiemTichLuy, HangThanhVien)
+SELECT 'KH' || i, 'Khách hàng ' || i, '08' || LPAD(i::text, 8, '0'),
+       d.diem,
+       CASE WHEN d.diem >= 15000 THEN 'Platinum'
+            WHEN d.diem >= 10000 THEN 'Gold'
+            WHEN d.diem >= 5000  THEN 'Silver'
+            ELSE 'Bronze' END
+FROM generate_series(1, 300) i
+CROSS JOIN LATERAL (SELECT (floor(random() * 20000))::int AS diem) d
+ON CONFLICT (MaKH) DO UPDATE
+SET HoTen = EXCLUDED.HoTen, SDT = EXCLUDED.SDT,
+    DiemTichLuy = EXCLUDED.DiemTichLuy, HangThanhVien = EXCLUDED.HangThanhVien;
+
+-- 9. Tồn kho: mọi chi nhánh × 35 nguyên liệu (MÃ ĐÚNG qua JOIN bảng gốc)
+INSERT INTO TONKHO_CHINHANH (MaCN, MaNL, SoLuongTon, TonToiThieu, GiaNhapGanNhat)
+SELECT cn.MaCN, nl.MaNL,
+       (floor(random() * 4000) + 1000)::numeric, 500,
+       (floor(random() * 40) + 10) * 1000
+FROM CHINHANH cn CROSS JOIN NGUYENLIEU nl
+ON CONFLICT (MaCN, MaNL) DO NOTHING;
+
+-- Vài dòng dưới ngưỡng để có cảnh báo tồn kho trên dashboard
+UPDATE TONKHO_CHINHANH SET SoLuongTon = 50
+WHERE (MaCN, MaNL) IN (
+  ('CN001','NL003'), ('CN001','NL015'), ('CN002','NL010'),
+  ('CN003','NL001'), ('CN002','NL029')
+);
+
+-- 10. Công thức sản phẩm (CONGTHUC) — để trigger trừ kho khi bán hoạt động
+INSERT INTO CONGTHUC (MaSP, MaNL, DinhMuc) VALUES
+-- L01 - Cà phê máy
+('SP001','NL001',18),
+('SP002','NL001',18),('SP002','NL029',100),
+('SP003','NL001',18),('SP003','NL003',120),
+('SP004','NL001',18),('SP004','NL003',150),('SP004','NL006',20),
+('SP005','NL001',18),('SP005','NL003',120),('SP005','NL009',25),
+('SP006','NL001',25),('SP006','NL029',100),
+('SP007','NL001',25),('SP007','NL023',1),('SP007','NL029',100),
+-- L02 - Cà phê truyền thống
+('SP008','NL002',20),('SP008','NL003',80),('SP008','NL004',30),
+('SP009','NL002',20),('SP009','NL004',30),('SP009','NL029',120),
+('SP010','NL002',20),('SP010','NL027',15),('SP010','NL029',120),
+('SP011','NL002',20),('SP011','NL004',30),
+('SP012','NL002',20),('SP012','NL027',15),
+-- L03 - Trà trái cây
+('SP013','NL013',5),('SP013','NL018',60),('SP013','NL023',1),
+('SP014','NL013',5),('SP014','NL019',60),
+('SP015','NL014',5),('SP015','NL021',30),
+('SP016','NL013',5),('SP016','NL022',1),('SP016','NL027',20),
+('SP017','NL013',5),('SP017','NL020',40),
+-- L04 - Trà sữa
+('SP018','NL012',8),('SP018','NL003',100),('SP018','NL005',30),('SP018','NL015',50),
+('SP019','NL012',8),('SP019','NL003',100),('SP019','NL005',30),
+('SP020','NL010',8),('SP020','NL003',120),('SP020','NL005',30),
+('SP021','NL003',120),('SP021','NL005',30),('SP021','NL015',40),
+('SP022','NL003',200),('SP022','NL015',50),('SP022','NL027',20),
+-- L05 - Đá xay
+('SP023','NL010',10),('SP023','NL003',120),('SP023','NL029',150),
+('SP024','NL009',30),('SP024','NL003',120),('SP024','NL029',150),
+('SP025','NL009',20),('SP025','NL003',120),('SP025','NL029',150),
+('SP026','NL006',25),('SP026','NL003',120),('SP026','NL029',150),
+('SP027','NL001',18),('SP027','NL009',25),('SP027','NL003',120),('SP027','NL029',150),
+-- L06 - Nước ép & soda
+('SP028','NL028',150),('SP028','NL022',1),('SP028','NL026',5),
+('SP029','NL028',150),('SP029','NL021',25),('SP029','NL027',20),
+('SP030','NL023',3),
+('SP031','NL024',200),
+('SP032','NL025',200),
+-- L07 - Bánh ngọt
+('SP033','NL035',1),('SP033','NL033',10),
+('SP034','NL035',1),('SP034','NL009',15),
+('SP035','NL034',60),('SP035','NL011',5),
+('SP036','NL034',80),('SP036','NL021',20),
+('SP037','NL034',50),('SP037','NL022',1),
+-- L08 - Bữa sáng nhẹ
+('SP038','NL034',30),('SP038','NL033',10),
+('SP039','NL033',20),
+('SP040','NL033',10)
+ON CONFLICT (MaSP, MaNL) DO UPDATE SET DinhMuc = EXCLUDED.DinhMuc;
 
 -- ============================================================
--- TẦNG 3: GIAO DỊCH VÀ CHỨNG TỪ (HEAVY LOAD)
+-- TẦNG 1: GIAO DỊCH (gọn, ngày gần đây, MÃ ĐÚNG)
 -- ============================================================
 
--- 1. Tạo 1 TRIỆU Hóa đơn
-INSERT INTO HOADON (MaHD, MaCN, NgayLap, TongTienHang, GiamGia, TongThanhToan, MaKH, MaNV, LoaiDonHang, TrangThai)
-SELECT 
-    'HD' || i,
-    'CN' || (floor(random()*10)+1),
-    NOW() - (random() * interval '730 days'),
-    150000, 0, 150000, -- Dữ liệu giả định để tránh Trigger chạy lâu
-    'KH' || (floor(random()*5000)+1),
-    'NV' || (floor(random()*500)+1),
-    (ARRAY['DineIn', 'TakeAway', 'Delivery'])[floor(random()*3)+1],
-    'Completed'
-FROM generate_series(1, 1000000) i 
-ON CONFLICT DO NOTHING;
+-- 1. Hóa đơn (3.000 đơn Completed, rải đều 90 ngày gần nhất)
+INSERT INTO HOADON (MaHD, MaCN, MaKH, MaNV, NgayLap, LoaiDonHang, TongTienHang, GiamGia, TongThanhToan, TrangThai)
+SELECT 'HD' || LPAD(i::text, 6, '0'),
+       'CN' || LPAD((floor(random() * 10) + 1)::text, 3, '0'),
+       'KH' || (floor(random() * 300) + 1),
+       'NV' || LPAD((floor(random() * 40) + 1)::text, 3, '0'),
+       NOW() - (random() * 90) * interval '1 day',
+       (ARRAY['DineIn','TakeAway','Delivery'])[floor(random() * 3) + 1],
+       0, 0, 0,
+       'Completed'
+FROM generate_series(1, 3000) i
+ON CONFLICT (MaHD) DO NOTHING;
 
--- 2. Tạo Phiếu nhập hàng
-INSERT INTO PHIEUNHAP (MaPN, MaCN, NgayNhap, TongTien, MaNCC, TrangThai)
-SELECT 
-    'PN'||i, 
-    'CN' || (floor(random()*10)+1),
-    NOW() - (random() * interval '730 days'), 
-    5000000, 'NCC'||(floor(random()*100)+1), 'Received'
-FROM generate_series(1, 5000) i 
-ON CONFLICT DO NOTHING;
-
--- ============================================================
--- TẦNG 4: CHI TIẾT (HEAVY LOAD)
--- ============================================================
-
--- 1. Chi tiết hóa đơn (Sinh ngẫu nhiên món cho 1 triệu HD)
+-- 2. Chi tiết hóa đơn (1..3 dòng/đơn, SP001..SP040)
 INSERT INTO CHITIET_HOADON (MaHD, MaSP, SoLuong, GiaBanTaiThoiDiem)
-SELECT 
-    'HD' || s.id,
-    'SP' || LPAD((floor(random() * 40) + 1)::text, 3, '0'),
-    (floor(random() * 5) + 1)::int,
-    (floor(random() * 100 + 20)) * 1000
-FROM 
-    generate_series(1, 1000000) AS s(id),
-    generate_series(1, floor(random() * 3 + 1)::int) 
+SELECT 'HD' || LPAD(s.id::text, 6, '0'),
+       'SP' || LPAD((floor(random() * 40) + 1)::text, 3, '0'),
+       (floor(random() * 4) + 1)::int,
+       (floor(random() * 80) + 25) * 1000
+FROM generate_series(1, 3000) AS s(id),
+     generate_series(1, (floor(random() * 3) + 1)::int)
 ON CONFLICT (MaHD, MaSP) DO NOTHING;
 
--- 2. Thanh toán (Gắn đúng chuẩn Enum)
+-- 3. Tính lại tổng tiền hóa đơn theo chi tiết (trigger đang tắt)
+UPDATE HOADON hd
+SET TongTienHang = t.tong, TongThanhToan = t.tong
+FROM (SELECT MaHD, SUM(SoLuong * GiaBanTaiThoiDiem) AS tong
+      FROM CHITIET_HOADON GROUP BY MaHD) t
+WHERE hd.MaHD = t.MaHD;
+
+-- 4. Thanh toán (mỗi đơn > 0 một giao dịch Success)
 INSERT INTO THANHTOAN (MaTT, MaHD, PhuongThuc, SoTien, NgayTT, TrangThai, LoaiGiaoDich)
-SELECT 
-    'TT'||i, 'HD'||i,
-    (ARRAY['Cash', 'EWallet', 'Card', 'BankTransfer'])[floor(random()*4)+1],
-    150000, NOW() - (random()*730 * interval '1 day'),
-    'Success', 'Payment'
-FROM generate_series(1, 1000000) i 
-ON CONFLICT DO NOTHING;
+SELECT 'TT' || substring(hd.MaHD from 3),
+       hd.MaHD,
+       (ARRAY['Cash','Card','EWallet','BankTransfer'])[floor(random() * 4) + 1],
+       hd.TongThanhToan, hd.NgayLap, 'Success', 'Payment'
+FROM HOADON hd
+WHERE hd.TongThanhToan > 0
+ON CONFLICT (MaTT) DO NOTHING;
 
--- 3. Nhật ký kho
-INSERT INTO NHATKYKHO (MaCN, MaNL, LoaiBienDong, SoLuong, SoLuongTruoc, SoLuongSau, NguonPhatSinh, NgayGhi)
-SELECT 
-    'CN' || (floor(random()*10)+1),
-    'NL' || (floor(random()*100)+1),
-    (ARRAY['Import', 'Export', 'Adjustment', 'Wastage'])[floor(random()*4)+1],
-    floor(random()*100 + 1), 500, 400,
-    (ARRAY['PHIEUNHAP', 'HOADON', 'KIEMKHO'])[floor(random()*3)+1],
-    NOW() - (random()*730 * interval '1 day')
-FROM generate_series(1, 100000) i 
-ON CONFLICT DO NOTHING;
+-- 5. Phiếu nhập (40) + chi tiết
+INSERT INTO PHIEUNHAP (MaPN, MaCN, MaNCC, MaNVLap, NgayNhap, TongTien, TrangThai)
+SELECT 'PN' || LPAD(i::text, 5, '0'),
+       'CN' || LPAD((floor(random() * 10) + 1)::text, 3, '0'),
+       'NCC' || (floor(random() * 15) + 1),
+       'NV' || LPAD((floor(random() * 40) + 1)::text, 3, '0'),
+       NOW() - (random() * 120) * interval '1 day',
+       0, 'Received'
+FROM generate_series(1, 40) i
+ON CONFLICT (MaPN) DO NOTHING;
 
--- 4. Phân công ca làm
-INSERT INTO PHANCONG (MaPC, MaNV, MaCN, MaCL, NgayPhanCong, TrangThai)
-SELECT 
-    'PC' || i,  
-    'NV' || (floor(random()*100)+1),
-    'CN' || (floor(random()*10)+1),
-    'CL' || LPAD((floor(random()*3)+1)::text, 3, '0'), 
-    NOW() - (random()*30 * interval '1 day'),
-    'Scheduled'
-FROM generate_series(1, 50000) i
-ON CONFLICT (MaPC) DO NOTHING; 
+INSERT INTO CHITIET_PHIEUNHAP (MaPN, MaNL, SoLuong, DonGia)
+SELECT 'PN' || LPAD(s.id::text, 5, '0'),
+       'NL' || LPAD((floor(random() * 35) + 1)::text, 3, '0'),
+       (floor(random() * 200) + 20)::numeric,
+       (floor(random() * 40) + 10) * 1000
+FROM generate_series(1, 40) AS s(id),
+     generate_series(1, (floor(random() * 4) + 1)::int)
+ON CONFLICT (MaPN, MaNL) DO NOTHING;
 
--- BẬT LẠI TRIGGERS SAU KHI NẠP XONG
-SET session_replication_role = 'origin';
+UPDATE PHIEUNHAP pn
+SET TongTien = t.tong
+FROM (SELECT MaPN, SUM(SoLuong * DonGia) AS tong FROM CHITIET_PHIEUNHAP GROUP BY MaPN) t
+WHERE pn.MaPN = t.MaPN;
 
--- LÀM MỚI MATERIALIZED VIEWS ĐỂ CẬP NHẬT 1 TRIỆU DATA
-REFRESH MATERIALIZED VIEW mv_doanhthu_ngay;
-REFRESH MATERIALIZED VIEW mv_top_sanpham;
+-- 6. Phiếu chi (120) cho phần tài chính/

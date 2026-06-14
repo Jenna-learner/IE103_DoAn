@@ -108,17 +108,23 @@ export default function KhachHang() {
   /* ── Load ── */
   const loadCustomers = async () => {
     setLoading(true)
+    // Khách hàng là dữ liệu chính: lỗi mới báo.
     try {
-      const [customerRes, orderRes] = await Promise.all([
-        api.get('/khach-hang', { params: { page: 1, limit: 10000 } }),
-        api.get('/hoa-don', { params: { page: 1, limit: 500 } }),
-      ])
-      setCustomers((customerRes.data || []).map(normalizeCustomer))
-      setOrders((orderRes.data || []).map(normalizeOrder))
-    } catch {
-      toast.error('Không tải được danh sách khách hàng')
-    } finally {
+      const res = await api.get('/khach-hang', { params: { page: 1, limit: 10000 } })
+      setCustomers((res.data || []).map(normalizeCustomer))
+    } catch (err) {
+      toast.error(err.message || 'Không tải được danh sách khách hàng')
       setLoading(false)
+      return
+    }
+    setLoading(false)
+
+    // Lịch sử đơn hàng chỉ phụ trợ cho modal chi tiết → lỗi thì bỏ qua, KHÔNG báo lỗi.
+    try {
+      const res = await api.get('/hoa-don', { params: { page: 1, limit: 500 } })
+      setOrders((res.data || []).map(normalizeOrder))
+    } catch {
+      setOrders([])
     }
   }
 
